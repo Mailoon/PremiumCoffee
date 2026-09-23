@@ -1,0 +1,10 @@
+services:
+  app:
+    build: .
+    container_name: premiumcoffe-app
+    environment:
+      DB_URL: ${DB_URL}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "8080:8080"
