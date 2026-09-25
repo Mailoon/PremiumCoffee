@@ -1,11 +1,11 @@
-package Coffe
+package Coffee
 
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
 
 @SpringBootApplication
-class PremiumCoffeApplication
+class PremiumCoffeeApplication
 
 fun main(args: Array<String>) {
-    runApplication<PremiumCoffeApplication>(*args)
+    runApplication<PremiumCoffeeApplication>(*args)
 }
