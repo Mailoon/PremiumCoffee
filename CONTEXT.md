@@ -21,6 +21,7 @@ The user wants to learn while building the project, so the entire application mu
 * Flyway (owns the schema and versioned migrations)
 * REST API
 * Docker / Docker Compose
+* Cloudinary SDK `com.cloudinary:cloudinary-http5:2.4.0` (first storage provider)
 
 Database decision: the direct Supabase host (`db.<ref>.supabase.co`) only supports IPv6, not IPv4, so it cannot connect from Windows/Docker. Use the **pooler** `aws-0-us-east-2.pooler.supabase.com` with the `postgres.<project_ref>` user. Real credentials are stored in the gitignored `.env` file. The `db-migration` service/direct connection is not kept in the repository.
 
@@ -36,25 +37,27 @@ Database decision: the direct Supabase host (`db.<ref>.supabase.co`) only suppor
 * SSR for initial product and variant information
 * Three.js/WebGL for the interactive 3D viewer
 
-## Future storage
+## Storage (current status)
 
-Development:
-* MinIO through Docker (S3 compatible)
+Implemented:
+* Cloudinary through the `MediaStorage` port, injected as a plain POO adapter
 
-Production/future:
-* Cloudinary initially as a storage/CDN option
+Planned:
+* MinIO through Docker (S3 compatible) for development
 * S3/R2 as a future possibility
 
-Mandatory abstraction (do not couple the domain to a provider):
+Mandatory abstraction (do not couple the services to a provider) — `src/main/kotlin/Coffee/Tools/Media/`:
 
 ```kotlin
 interface MediaStorage {
-    fun upload(...)
-    fun delete(...)
-    fun getUrl(...)
+    val provider: MediaProvider
+    fun upload(media: MediaUpload): StoredMedia
+    fun delete(publicId: String)
 }
-// Implementations: MinioMediaStorage, CloudinaryMediaStorage
+// Implementations: CloudinaryMediaStorage (done), MinioMediaStorage (planned)
 ```
+
+The port has no `getUrl` on purpose: the delivery URL that the provider returns on upload is stored in `media_assets.url` and served from there. Cloudinary 2.x signs every generated URL with an expiring `?_a=` token, so deriving URLs later is not an option.
 
 ---
 
@@ -120,6 +123,39 @@ Every layer follows the English convention: `findAll(query)`, `findById(id)`, `c
 * Service reads use read-only transactions and writes use write transactions; relationships are LAZY and `open-in-view=false`
 * Services resolve parent references before writes; missing references return 400, while missing resources return 404
 * Deletes do not cascade. A foreign-key violation is returned as 409 so the client can remove dependent records explicitly before retrying
+* `CrudRepositoryPort` also declares `flush()`, so a service can force a pending SQL statement (and therefore a possible constraint violation) to happen at a controlled point
+
+## Media upload (implemented) — `src/main/kotlin/Coffee/Tools/Media/`
+
+Flow: `MediaAssetController` → `MediaAssetService` → `MediaStorage` port → provider → row in `media_assets`.
+
+* `MediaStorage.kt`, `MediaUpload.kt`, `StoredMedia.kt` are plain Kotlin (no Spring, no SDK)
+* `Cloudinary/CloudinaryMediaStorage.kt` is the only class that knows the SDK; `Cloudinary/CloudinarySettings.kt` builds its configuration
+* Cloudinary SDK gotcha: the `http5` module only accepts a `File`, a local path `String` or a `byte[]` as the file parameter, and it fails at runtime with `IOException: Unrecognized file parameter` for anything else. The Java signature is `upload(Object file, Map options)`, so **the compiler does not protect us**. `CloudinaryMediaStorage` therefore sends `media.content` (a `ByteArray`) through a private `uploadBytes(content: ByteArray, ...)` method, which is the only path to the SDK, and a test pins that contract
+* `DisabledMediaStorage.kt` is the fallback used when `CLOUDINARY_ENABLED` is false, so the app always starts
+* `Configuration/MediaStorageConfiguration.kt` declares the single `MediaStorage` bean conditionally
+* Endpoints: `POST /media-assets/upload` (multipart `file`, 201) and `GET /media-assets/{id}/url` (returns the stored `publicId` and `url` without contacting the provider)
+* Environment variables: `CLOUDINARY_ENABLED`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_FOLDER` (default `premiumcoffee`). Real values live in the gitignored `.env`
+* Uploads are limited to 10MB (`spring.servlet.multipart.max-file-size`): an oversized file returns 413. The limit is global, so a GLB above 10MB is currently rejected too
+* Errors: 400 empty file or unrecognized content, 404 missing asset or missing stored URL, 413 oversized file, 502 provider failure (`MediaStorageException`), 503 provider not configured
+
+Security rules applied in this slice:
+* The content is verified from its own bytes before any provider call: `Content/MediaContentInspector.kt` reads only the first 512 bytes and returns a `DetectedFormat` (`JPEG`, `PNG`, `GIF`, `WEBP`, `AVIF`, `HEIC`, `SVG`, `GLB`) or `null`. An unrecognized file is rejected with 400 and the storage port is never called
+* `mime_type` and `asset_type` are derived from that verified format, never from the file name, the extension, or the `contentType` claimed by the client. `Content/DetectedFormat.kt` owns the single mapping to mime type and to `MediaAssetType` (a GLB becomes `MODEL_3D` + `model/gltf-binary`, an SVG becomes `SVG` + `image/svg+xml`)
+* The provider is a second layer: `CloudinaryMediaStorage` sends `resource_type: "image"` (required by Cloudinary to accept 3D models) and `allowed_formats` = `jpg, jpeg, png, gif, webp, avif, heic, svg, glb`
+* The validation lives in `MediaAssetService`, not in a servlet filter, so it applies to every transport (REST, imports, future jobs)
+* `file_name` is sanitized: only the last path segment is kept (`../` and `C:\` are stripped), control characters are removed, and it is truncated to the 255-character column limit
+* The client never chooses the storage path: no `public_id`, `use_filename` or eager transformations are sent, so the provider generates the public id
+* `DELETE /media-assets/{id}` deletes the row, calls `flush()` so a foreign-key violation surfaces before any remote call, and only then deletes the remote file; a failed `flush()` leaves the remote file untouched (409 to the client)
+* The remote file is only deleted when `media_assets.provider` equals the configured provider, and the public id always comes from our own row, never from the request
+
+Deliberately deferred (documented, not implemented):
+* Real dimensions, pixel-bomb limits and antivirus scanning
+* Sanitizing or rasterizing SVG before delivery (an SVG is active content, so it must only be served from the provider origin, never inlined in the storefront)
+* A separate size limit for GLB uploads, and a check that the returned `secure_url` keeps the `.glb` extension that Three.js needs
+* Transformations, resizing, WebP/AVIF conversion and CDN tuning
+* Cleaning up an orphaned remote file when the database insert fails after a successful upload (needs a job, not an endpoint)
+* `MinioMediaStorage` and `S3MediaStorage` (the port already allows adding them without touching the services)
 
 ## Applied migrations — `src/main/resources/db/migration/`
 
@@ -138,6 +174,8 @@ Rule: **never modify an applied migration** because Flyway reports a checksum er
 * Flyway applied V2 and V3 to Supabase (`Successfully applied ... now at version v2/v3`)
 * Hibernate validated all seven entities against the tables without errors, and the application started (`Started Coffee.PremiumCoffeeApplication`)
 * The server responded at `http://localhost:8080`, and the real endpoints returned data from Supabase
+* 101 unit tests pass (`.\gradlew.bat test`); the Cloudinary adapter is covered with mocks, so no test performs network calls
+* A real 502 from the provider is logged with its full stack trace and request path by `ApiExceptionHandler`; the client-facing `detail` is unchanged
 
 ---
 
@@ -151,7 +189,7 @@ The V2 catalog schema is authoritative: UUIDs, unique `slug`, `created_at`/`upda
 
 ## Future work
 
-The `orders` and `order_items` tables are still to be built. The `media_assets` table already exists, but the complete upload and storage-adapter flow does not.
+The `orders` and `order_items` tables are still to be built. The `media_assets` table exists and the Cloudinary upload slice is already implemented (see *Media upload*).
 
 orders:
 * id UUID, order_number, status, subtotal, total, currency, created_at, updated_at
@@ -163,9 +201,9 @@ order_items:
 
 ---
 
-# Multimedia system (future)
+# Multimedia system
 
-Do not store large files in PostgreSQL: the database stores metadata and relationships, while MinIO or Cloudinary stores the files.
+Do not store large files in PostgreSQL: the database stores metadata and relationships, while MinIO or Cloudinary stores the files. Cloudinary is already wired through the `MediaStorage` port for image, SVG and GLB uploads.
 
 The `media_assets` table already exists with: asset_type, provider, storage_key, public_id, url, mime_type, file_name, file_size_bytes, width, and height.
 
@@ -177,9 +215,9 @@ A variant can have standard images, SVG, a poster, and a GLB model.
 
 ---
 
-# 3D models (future)
+# 3D models (upload implemented, viewer pending)
 
-* Main format: GLB. Do not use SVG as a substitute for a 3D model.
+* Main format: GLB. Do not use SVG as a substitute for a 3D model. `POST /media-assets/upload` already accepts GLB and stores it as `MODEL_3D` + `model/gltf-binary`
 * SVG can exist as an asset and later be used for geometric or procedural generation.
 * GLB files can represent either a complete variant model or independent 3D components for the Builder.
 
@@ -285,7 +323,7 @@ PHASE 1 — PostgreSQL + Docker + Flyway → categories, products, variants, pri
 
 PHASE 2 — Spring Boot + Clean Architecture → catalog CRUD, validations, REST endpoints — **catalog REST, Bean Validation, pagination, and transactional boundaries complete**; the larger Clean Architecture migration remains pending.
 
-PHASE 3 — Media → `MediaStorage`, MinIO, images, SVG, metadata — **pending**.
+PHASE 3 — Media → `MediaStorage`, MinIO, images, SVG, metadata — **partially done**: the port, the Cloudinary adapter, the upload endpoint, the content allowlist, the safe delete, and the SVG/GLB uploads are implemented; MinIO is pending.
 
 PHASE 4 — 3D → GLB, variant/GLB relationship, asset endpoint, Next.js, Three.js, 3D viewer — **pending**.
 

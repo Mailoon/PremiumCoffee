@@ -132,6 +132,8 @@ class AbstractCrudServiceTest {
         override fun delete(entity: TestEntity) {
             entities.remove(entity.id)
         }
+
+        override fun flush() = Unit
     }
 
     private data class TestEntity(

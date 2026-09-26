@@ -13,7 +13,7 @@ import java.util.UUID
 
 @Service
 class ProductVariantService(
-    private val repository: ProductVariantRepository,
+    repository: ProductVariantRepository,
     private val productRepository: ProductRepository
 ) : AbstractCrudService<ProductVariant, UUID, ProductVariantRequest>(repository) {
 

@@ -1,6 +1,10 @@
 package Coffee.Common.Controllers
 
 import Coffee.Common.Exceptions.ResourceNotFoundException
+import Coffee.Tools.Media.Exceptions.MediaStorageException
+import Coffee.Tools.Media.Exceptions.MediaStorageNotConfiguredException
+import jakarta.servlet.http.HttpServletRequest
+import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.http.HttpStatus
 import org.springframework.http.HttpStatusCode
@@ -11,6 +15,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
+import org.springframework.web.multipart.MaxUploadSizeExceededException
 import org.springframework.web.server.ResponseStatusException
 import java.sql.SQLException
 
@@ -60,6 +65,28 @@ class ApiExceptionHandler {
         return response
     }
 
+    @ExceptionHandler(MediaStorageNotConfiguredException::class)
+    fun handleStorageNotConfigured(
+        exception: MediaStorageNotConfiguredException
+    ): ResponseEntity<ProblemDetail> =
+        problem(HttpStatus.SERVICE_UNAVAILABLE, exception.message ?: "Storage provider is not configured")
+
+    @ExceptionHandler(MediaStorageException::class)
+    fun handleStorageFailure(
+        exception: MediaStorageException,
+        request: HttpServletRequest
+    ): ResponseEntity<ProblemDetail> {
+        log.error("Storage provider call failed for {}", request.requestURI, exception)
+        return problem(
+            HttpStatus.BAD_GATEWAY,
+            exception.message ?: "The storage provider could not complete the operation"
+        )
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException::class)
+    fun handleUploadTooLarge(exception: MaxUploadSizeExceededException): ResponseEntity<ProblemDetail> =
+        problem(HttpStatus.CONTENT_TOO_LARGE, "The uploaded file exceeds the maximum allowed size")
+
     private fun problem(status: HttpStatusCode, message: String): ResponseEntity<ProblemDetail> =
         ResponseEntity.status(status).body(ProblemDetail.forStatusAndDetail(status, message))
 
@@ -75,5 +102,9 @@ class ApiExceptionHandler {
         }
 
         return null
+    }
+
+    companion object {
+        private val log = LoggerFactory.getLogger(ApiExceptionHandler::class.java)
     }
 }

@@ -7,7 +7,7 @@ import Coffee.Common.Ports.CrudRepositoryPort
 import org.springframework.transaction.annotation.Transactional
 
 abstract class AbstractCrudService<T : Any, ID : Any, R : Any>(
-    private val repository: CrudRepositoryPort<T, ID>
+    protected val repository: CrudRepositoryPort<T, ID>
 ) : CrudService<T, ID, R> {
 
     @Transactional(readOnly = true)

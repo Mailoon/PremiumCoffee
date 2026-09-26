@@ -15,7 +15,7 @@ import java.util.UUID
 
 @Service
 class Variant3DComponentService(
-    private val repository: Variant3DComponentRepository,
+    repository: Variant3DComponentRepository,
     private val variantRepository: ProductVariantRepository,
     private val mediaAssetRepository: MediaAssetRepository
 ) : AbstractCrudService<Variant3DComponent, UUID, Variant3DComponentRequest>(repository) {

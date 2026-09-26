@@ -11,7 +11,7 @@ import java.util.UUID
 
 @Service
 class CategoryService(
-    private val repository: CategoryRepository
+    repository: CategoryRepository
 ) : AbstractCrudService<Category, UUID, CategoryRequest>(repository) {
 
     override val resourceName: String = "Category"

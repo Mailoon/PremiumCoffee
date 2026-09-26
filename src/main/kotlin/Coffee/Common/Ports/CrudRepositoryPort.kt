@@ -9,4 +9,5 @@ interface CrudRepositoryPort<T : Any, ID : Any> {
     fun findById(id: ID): Optional<T>
     fun <S : T> save(entity: S): S
     fun delete(entity: T)
+    fun flush()
 }

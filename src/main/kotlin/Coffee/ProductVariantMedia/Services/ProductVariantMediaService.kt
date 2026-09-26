@@ -15,7 +15,7 @@ import java.util.UUID
 
 @Service
 class ProductVariantMediaService(
-    private val repository: ProductVariantMediaRepository,
+    repository: ProductVariantMediaRepository,
     private val variantRepository: ProductVariantRepository,
     private val mediaAssetRepository: MediaAssetRepository
 ) : AbstractCrudService<ProductVariantMedia, UUID, ProductVariantMediaRequest>(repository) {
