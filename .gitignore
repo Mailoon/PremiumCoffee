@@ -1,48 +1,60 @@
-.gradle
-build/
-!gradle/wrapper/gradle-wrapper.jar
+# ==========================================================================
+# PremiumCoffe — .gitignore raiz (monorepo)
+# Cubre Backend (Kotlin/Gradle) y Frontend (Next.js/Node) con un solo archivo.
+# Los patrones sin barra inicial aplican en cualquier nivel del repo.
+# ==========================================================================
+
+# --- Secrets (regla critica) ---------------------------------------------
+# El .env vive en Docker/.env porque es donde esta docker-compose.yml.
+# NUNCA debe llegar a git. Las excepciones de abajo son las unicas permitidas.
+.env
+.env.*
+!.env.example
+
+# --- Gradle / Kotlin / Spring Boot ---------------------------------------
+.gradle/
+**/gradle/app/
+.kotlin/
+**/build/
+!**/gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
 
-### IntelliJ IDEA ###
+# --- Node / Next.js / Frontend -------------------------------------------
+**/node_modules/
+**/.next/
+**/out/
+**/.turbo/
+**/.vercel/
+**/*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Java / IDE (parcialmente absorbido de Backend/.gitignore) ----------
 .idea/modules.xml
 .idea/jarRepositories.xml
 .idea/compiler.xml
 .idea/libraries/
-*.iws
-*.iml
-*.ipr
-out/
-!**/src/main/**/out/
-!**/src/test/**/out/
+**/*.iws
+**/*.iml
+**/*.ipr
+**/out/
+**/.apt_generated
+**/.classpath
+**/.factorypath
+**/.project
+**/.settings/
+**/.springBeans
+**/.sts4-cache
+**/bin/
+**/nbproject/private/
+**/nbbuild/
+**/dist/
+**/nbdist/
+**/nbgradle/
 
-### Kotlin ###
-.kotlin
-
-### Eclipse ###
-.apt_generated
-.classpath
-.factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
-bin/
-!**/src/main/**/bin/
-!**/src/test/**/bin/
-
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-
-### VS Code ###
-.vscode/
-
-### Mac OS ###
+# --- Sistema operativo ---------------------------------------------------
 .DS_Store
-
-### Secrets ###
-.env
+Thumbs.db

@@ -1,0 +1,160 @@
+# ==========================================================================
+# PremiumCoffe — orquestacion local
+#
+#   docker compose up --build              -> levanta migrate + backend
+#   docker compose up --build -d           -> en segundo plano
+#   docker compose logs -f backend         -> ver el arranque
+#   docker compose config                  -> ver el .env ya interpretado
+#
+# Si algo falla con "variable is not set", el .env esta mal o le falta algo.
+# Ver la nota sobre .env al final de este archivo.
+# ==========================================================================
+
+name: premiumcoffe
+
+services:
+
+  # ------------------------------------------------------------------------
+  # migrate — tarea de un solo uso. Aplica las migraciones y se apaga.
+  #
+  # Por que NO deixar que Flyway corra dentro del backend:
+  # con un contenedor no se nota, pero al escalar a varias replicas todas
+  # arrancan a la vez, todas ven el esquema desactualizado y todas intentan
+  # migrar. Solo una gana el lock y las demas revientan el deploy.
+  #
+  # Este patron es el mismo en la nube:
+  #   AWS   -> ECS Task / Step Functions
+  #   Azure -> Container Apps Job
+  #   GCP   -> Cloud Run Job
+  # ------------------------------------------------------------------------
+  migrate:
+    image: flyway/flyway:11
+    container_name: premiumcoffe-migrate
+    restart: "no"
+    command: ["migrate"]
+    volumes:
+      - ../Backend/src/main/resources/db/migration:/flyway/sql:ro
+    environment:
+      FLYWAY_URL: ${DB_URL:?DB_URL no esta definido. Copia Docker/.env.example a Docker/.env y rellenalo}
+      FLYWAY_USER: ${DB_USER:?DB_USER no esta definido en Docker/.env}
+      FLYWAY_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD no esta definido en Docker/.env}
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql
+      # Reintenta 30 veces: la red o el pooler pueden tardar en responder
+      FLYWAY_CONNECT_RETRIES: "30"
+      # Las migraciones ya aplicadas no se tocan jamas (regla de Flyway)
+      FLYWAY_VALIDATE_ON_MIGRATE: "true"
+
+  # ------------------------------------------------------------------------
+  # backend — API Spring Boot
+  # ------------------------------------------------------------------------
+  backend:
+    build:
+      context: ..
+      dockerfile: Docker/backend.Dockerfile
+    image: premiumcoffe/backend:local
+    container_name: premiumcoffe-backend
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    # Capa de seguridad del .env: required=true hace que compose FALLE si
+    # el archivo no existe, en vez de avisar y seguir con el backend vacio.
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      # --- Base de datos (Supabase pooler) ---
+      DB_URL: ${DB_URL:?DB_URL no esta definido en Docker/.env}
+      DB_USER: ${DB_USER:?DB_USER no esta definido en Docker/.env}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD no esta definido en Docker/.env}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
+
+      # --- Cloudinary ---
+      CLOUDINARY_ENABLED: ${CLOUDINARY_ENABLED:-false}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+      CLOUDINARY_FOLDER: ${CLOUDINARY_FOLDER:-premiumcoffee}
+
+      # --- Runtime ---
+      PORT: "8080"
+      MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-10MB}
+      # Logs en JSON para que CloudWatch / Log Analytics los indexen solos.
+      # En local puedes quitarlo y leer texto plano.
+      LOG_FORMAT: ${LOG_FORMAT:-ecs}
+      # El Job "migrate" ya migro. Esto garantiza que solo ese proceso
+      # escribe el esquema, aunque alguien levante el backend suelto.
+      SPRING_FLYWAY_ENABLED: "false"
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    # El arranque con Flyway validando 7 tablas contra Supabase es lento.
+    # 40s le da margen al graceful shutdown de 20s de abajo.
+    stop_grace_period: 40s
+    restart: unless-stopped
+
+# ==========================================================================
+# PENDIENTE — se activa cuando existan el frontend y el proxy
+# --------------------------------------------------------------------------
+#   frontend:
+#     build:
+#       context: ..
+#       dockerfile: Docker/frontend.Dockerfile
+#     image: premiumcoffe/frontend:local
+#     container_name: premiumcoffe-frontend
+#     depends_on:
+#       backend:
+#         condition: service_healthy
+#     environment:
+#       PORT: "3000"
+#     expose:
+#       - "3000"
+#
+#   caddy:
+#     image: caddy:2-alpine
+#     container_name: premiumcoffe-caddy
+#     depends_on:
+#       - backend
+#       - frontend
+#     ports:
+#       - "80:80"
+#       - "443:443"
+#     volumes:
+#       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+#       - caddy_data:/data
+#       - caddy_config:/config
+#
+# volumes:
+#   caddy_data:
+#   caddy_config:
+# ==========================================================================
+
+# ==========================================================================
+# NOTA SOBRE EL .env — lee esto antes de depurar un fallo raro
+# --------------------------------------------------------------------------
+# Compose lee el archivo .env que este en el MISMO DIRECTORIO que este
+# docker-compose.yml, es decir Docker/.env. No mira el de la raiz del repo
+# ni el de Backend/.
+#
+# Por eso el .env esta en Docker/ y por eso se borro el de Backend/.
+#
+# Lo que se hace con el archivo, paso a paso:
+#
+#   1. Compose lee Docker/.env en el HOST, antes de construir nada.
+#   2. Sustituye los ${DB_URL}, ${DB_USER}, etc. de este archivo.
+#   3. Docker CONSTRUYE la imagen usando el .dockerignore de la raiz del repo.
+#
+# El paso 3 es separado del paso 1. Por eso .env sigue estando en el
+# .dockerignore y NO rompe nada: lo unico que hace es impedir que tus
+# credenciales de Supabase y Cloudinary queden selladas dentro de una capa
+# de la imagen, donde si seria imposible borrarlas.
+#
+# Las sintaxis ${VAR:?mensaje} que ves arriba hacen que compose se detenga
+# con un mensaje claro si falta una variable. Sin ellas, compose la
+# sustituye por cadena vacia y el backend arranca para fallar mucho mas
+# tarde y con un error mucho mas dificil de leer.
+# ==========================================================================

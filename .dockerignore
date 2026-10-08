@@ -1,7 +1,56 @@
-.gradle/
-.idea/
-.kotlin/
-build/
+# ==========================================================================
+# PremiumCoffe — .dockerignore raiz (contexto de build del monorepo)
+#
+# IMPORTANTE — por que .env esta aqui y NO lo bloquea:
+#
+# Este archivo solo controla que archivos se COPIAN dentro de la imagen.
+# No tiene ningun efecto sobre si "docker compose" puede LEER Docker/.env:
+# compose lee ese archivo en el host ANTES de construir la imagen, y lo usa
+# para sustituir ${VARIABLE} en docker-compose.yml. Son dos mecanismos
+# totalmente separados.
+#
+# Por eso .env debe seguir excluido aqui: si no, tus credenciales de
+# Supabase y Cloudinary quedarian selladas en una capa de la imagen, y ahi
+# si quedarian de verdad atrapadas para siempre.
+# ==========================================================================
+
+# --- Secrets: nunca dentro de una capa de imagen -------------------------
 .git/
 .env
-*.log
+.env.*
+**/.env
+**/.env.*
+
+# --- VCS / metadatos ------------------------------------------------------
+.git/
+.github/
+**/.gitignore
+**/.gitattributes
+**/.editorconfig
+
+# --- Dependencias y artefactos de build ----------------------------------
+**/node_modules/
+**/.next/
+**/out/
+**/.turbo/
+**/.vercel/
+**/.gradle/
+**/.kotlin/
+**/build/
+**/dist/
+**/bin/
+**/out/
+**/.mvn/
+**/.idea/
+
+# --- Documentacion y entorno de desarrollo -------------------------------
+Docker/ARCHITECTURE.md
+Docker/Caddyfile
+**/*.md
+!Backend/CONTEXT.md
+
+# --- Logs y temporales ---------------------------------------------------
+**/*.log
+**/.DS_Store
+Thumbs.db
+**/.env.local
