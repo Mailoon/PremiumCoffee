@@ -1,5 +1,6 @@
 package Coffee.Product.Controller
 
+import Coffee.Common.ApiVersion
 import Coffee.Common.Controllers.AbstractCrudController
 import Coffee.Product.DTO.ProductRequest
 import Coffee.Product.DTO.ProductResponse
@@ -10,7 +11,7 @@ import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
 @RestController
-@RequestMapping("/api/v1/products")
+@RequestMapping(ApiVersion.V1 + "/products")
 class ProductController(
     service: ProductService
 ) : AbstractCrudController<Product, UUID, ProductRequest, ProductResponse>(

@@ -1,0 +1,71 @@
+# ==========================================================================
+# Caddy como reverse proxy — UN SOLO ORIGEN con TLS
+#
+# Esto es una CAPA DE PRODUCCION. En local, el navegador puede hablar
+# directamente con Nuxt (http://localhost:3000) y con el backend
+# (http://localhost:8080) sin ningun proxy de por medio.
+#
+# Entonces, ¿para qué sirve esto? Para REPETIR en local lo que va a pasar en
+# produccion. Entrar por un unico puerto con TLS hace que los problemas de
+# CORS, de mixed content y de rutas aparezcan aqui y no el dia del deploy.
+#
+# Caddy se activa solo con el perfil "tls":
+#
+#   docker compose up                    -> sin Caddy (dev rapido)
+#   docker compose --profile tls up      -> con Caddy (ensayo de produccion)
+#
+# ==========================================================================
+
+{
+	# Puerto 80 solo responde para redirigir a HTTPS.
+	# El certificado lo emite y renueva Caddy solo, sin cron ni certbot.
+}
+
+localhost {
+	# "internal" = Caddy se emite a si mismo un certificado local.
+	# El navegador avisara de que no es una CA de confianza, y eso es lo
+	# esperado: aqui probamos el cifrado, no la cadena de confianza real.
+	#
+	# En produccion esto se sustituye por el dominio real y Caddy pide el
+	# certificado a Let's Encrypt automaticamente:
+	#
+	#   api.tudominio.com {
+	#       ...
+	#   }
+	tls internal
+
+	# Sin esto, Caddy se quejaria de que todos los virtual hosts son HTTP.
+	encode zstd gzip
+
+	# Cabeceras de seguridad basicas. Se pueden activar por Dockerfile con
+	# https://caddyserver.com/docs/caddyfile/options, pero cuidado: CSP
+	# romperia Three.js si se restringen los scripts inline.
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	# ---- API y frontend salen por el MISMO origen -------------------------
+	#
+	# Por esto NO hay CORS: para el navegador, /api y / son la misma pagina.
+	# Si el frontend llamara directamente a http://backend:8080, cada
+	# respuesta del backend necesitaria cabeceras CORS y habria que
+	# mantenerlas sincronizadas con los dominios de cada entorno.
+
+	handle /api/* {
+		reverse_proxy frontend:3000
+	}
+
+	handle {
+		reverse_proxy frontend:3000
+	}
+
+	# Logs estructurados: un objeto JSON por peticion, igual que el
+	# LOG_FORMAT=ecs del backend. Asi CloudWatch / Log Analytics los
+	# indexan con los mismos campos.
+	log {
+		output stdout
+		format json
+	}
+}

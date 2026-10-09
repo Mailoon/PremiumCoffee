@@ -7,9 +7,14 @@
 # --- Secrets (regla critica) ---------------------------------------------
 # El .env vive en Docker/.env porque es donde esta docker-compose.yml.
 # NUNCA debe llegar a git. Las excepciones de abajo son las unicas permitidas.
+# OJO con el orden: git aplica la ULTIMA regla que coincide, asi que las
+# excepciones van DESPUES. Sin estas dos lineas, ".env.*" se comería tambien
+# los .example y ni Docker/.env.example ni Frontend/.env.local.example se
+# subirían nunca al repo.
 .env
 .env.*
 !.env.example
+!*.env.example
 
 # --- Gradle / Kotlin / Spring Boot ---------------------------------------
 .gradle/
@@ -20,10 +25,12 @@
 !**/src/main/**/build/
 !**/src/test/**/build/
 
-# --- Node / Next.js / Frontend -------------------------------------------
+# --- Node / Nuxt / Frontend ----------------------------------------------
 **/node_modules/
-**/.next/
-**/out/
+**/.nuxt/
+**/.output/
+**/.data/
+**/dist/
 **/.turbo/
 **/.vercel/
 **/*.tsbuildinfo
@@ -31,6 +38,11 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# .env.local de Nuxt. Aqui se apunta el backend a localhost:8080 para
+# trabajar con "npm run dev" sin Docker. Es personal, no se sube.
+Frontend/.env.local
+Frontend/.env.*.local
 
 # --- Java / IDE (parcialmente absorbido de Backend/.gitignore) ----------
 .idea/modules.xml

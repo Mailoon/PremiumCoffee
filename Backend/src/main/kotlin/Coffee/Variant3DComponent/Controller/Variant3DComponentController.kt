@@ -1,5 +1,6 @@
 package Coffee.Variant3DComponent.Controller
 
+import Coffee.Common.ApiVersion
 import Coffee.Common.Controllers.AbstractCrudController
 import Coffee.Variant3DComponent.DTO.Variant3DComponentRequest
 import Coffee.Variant3DComponent.DTO.Variant3DComponentResponse
@@ -10,7 +11,7 @@ import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
 @RestController
-@RequestMapping("/api/v1/variant-3d-components")
+@RequestMapping(ApiVersion.V1 + "/variant-3d-components")
 class Variant3DComponentController(
     service: Variant3DComponentService
 ) : AbstractCrudController<Variant3DComponent, UUID, Variant3DComponentRequest, Variant3DComponentResponse>(

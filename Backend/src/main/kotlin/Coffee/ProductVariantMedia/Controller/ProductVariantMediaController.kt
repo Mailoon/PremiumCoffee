@@ -1,5 +1,6 @@
 package Coffee.ProductVariantMedia.Controller
 
+import Coffee.Common.ApiVersion
 import Coffee.Common.Controllers.AbstractCrudController
 import Coffee.ProductVariantMedia.DTO.ProductVariantMediaRequest
 import Coffee.ProductVariantMedia.DTO.ProductVariantMediaResponse
@@ -10,7 +11,7 @@ import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
 @RestController
-@RequestMapping("/api/v1/product-variant-media")
+@RequestMapping(ApiVersion.V1 + "/product-variant-media")
 class ProductVariantMediaController(
     service: ProductVariantMediaService
 ) : AbstractCrudController<ProductVariantMedia, UUID, ProductVariantMediaRequest, ProductVariantMediaResponse>(

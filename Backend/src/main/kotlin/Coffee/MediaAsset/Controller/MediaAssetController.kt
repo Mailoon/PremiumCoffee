@@ -1,5 +1,6 @@
 package Coffee.MediaAsset.Controller
 
+import Coffee.Common.ApiVersion
 import Coffee.Common.Controllers.AbstractReadController
 import Coffee.MediaAsset.DTO.MediaAssetResponse
 import Coffee.MediaAsset.DTO.MediaAssetUrlResponse
@@ -18,7 +19,7 @@ import org.springframework.web.multipart.MultipartFile
 import java.util.UUID
 
 @RestController
-@RequestMapping("/api/v1/media-assets")
+@RequestMapping(ApiVersion.V1 + "/media-assets")
 class MediaAssetController(
     private val mediaAssetService: MediaAssetService
 ) : AbstractReadController<MediaAsset, UUID, MediaAssetResponse>(
