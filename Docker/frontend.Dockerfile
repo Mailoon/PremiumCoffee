@@ -34,7 +34,25 @@ ENV NUXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 # --------------------------------------------------------------------------
-# Stage 3 — runtime
+# Stage 3 (opcional) — dev
+#
+# Solo se construye con:  docker compose --profile dev build frontend-dev
+# Lleva node_modules completo y arranca "nuxt dev", que recarga en caliente.
+# El servicio dev de docker-compose.yml monta el codigo por volumen, asi que
+# este stage NO copia el codigo: solo deja las dependencias listas.
+# --------------------------------------------------------------------------
+FROM node:22-alpine AS dev
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY Frontend/package.json ./package.json
+COPY Frontend/nuxt.config.ts ./nuxt.config.ts
+
+ENV NUXT_TELEMETRY_DISABLED=1
+CMD ["npm", "run", "dev"]
+
+# --------------------------------------------------------------------------
+# Stage 4 — runtime
 #
 # NO se copia node_modules entero: en producción Nuxt solo necesita los que
 # estan en .output/server/node_modules, que ya son solo los de runtime.

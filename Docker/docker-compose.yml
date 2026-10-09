@@ -27,20 +27,6 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3000"
-      # La URL del backend NO se define aqui: Nuxt ya usa "http://backend:8080"
-      # por defecto (runtimeConfig.apiBase en nuxt.config.ts). Ese default es
-      # el nombre del servicio dentro de la red de Docker Compose, y por eso
-      # el frontend puede encontrar al backend sin conocer la IP.
-      #
-      # EN PRODUCCION hay que anadir esta linea de vuelta, apuntando al
-      # backend por su URL interna real de la nube (no publica):
-      #
-      #   NUXT_API_BASE: ${API_INTERNAL_URL}
-      #
-      # Se lee en TIEMPO DE EJECUCION, no al compilar, y por eso la misma
-      # imagen sirve para dev, staging y produccion sin reconstruir.
-      #
-      # runtimeConfig.public.siteUrl: esta si viaja al navegador.
       NUXT_PUBLIC_SITE_URL: ${SITE_PUBLIC_URL:-http://localhost:3000}
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
@@ -51,6 +37,58 @@ services:
       retries: 12
       start_period: 40s
     stop_grace_period: 20s
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------------
+  # frontend-dev — Nuxt con recarga en caliente (HMR)
+  #
+  # Solo con el perfil "dev":
+  #     docker compose --profile dev up -d frontend-dev
+  #
+  # Que resuelve: editas un .vue y ves el cambio en el navegador SIN
+  # reconstruir la imagen. El codigo va montado por volumen, asi que el
+  # contenedor ve tus cambios al instante.
+  #
+  # OJO: "nuxt dev" recompila el proyecto en memoria, asi que el primer
+  # arranque tarda bastante mas que el build de produccion. Es normal.
+  # ------------------------------------------------------------------------
+  frontend-dev:
+    build:
+      context: ..
+      dockerfile: Docker/frontend.Dockerfile
+      target: dev
+    image: premiumcoffe/frontend-dev:local
+    container_name: premiumcoffe-frontend-dev
+    profiles: ["dev"]
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      # "0.0.0.0" es obligatorio: si escucha en localhost DENTRO del
+      # contenedor, el puerto publicado desde el host no llega nunca.
+      NITRO_HOST: "0.0.0.0"
+      NITRO_PORT: "3000"
+      NUXT_API_BASE: ${API_INTERNAL_URL:-http://backend:8080}
+      NUXT_PUBLIC_SITE_URL: http://localhost:${FRONTEND_DEV_PORT:-3001}
+      # El watcher de Vite no recibe eventos de un bind mount en Docker
+      # Desktop (Windows/macOS). Sin esto habria que guardar cada archivo
+      # dos veces para que se notara el cambio.
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+      NUXT_TELEMETRY_DISABLED: "1"
+    volumes:
+      # Solo el codigo. node_modules NO se monta a proposito: las imagenes
+      # de node son de Linux y las de tu host son de Windows, y mezclarlas
+      # rompe los binarios nativos (esbuild, rollup, oxc...).
+      - ../Frontend/app:/app/app
+      - ../Frontend/server:/app/server
+      - ../Frontend/nuxt.config.ts:/app/nuxt.config.ts
+      - ../Frontend/package.json:/app/package.json
+      # Cache del watcher y de Vite en volumen, para no perderla al reiniciar
+      - frontend_dev_cache:/app/.nuxt
+    ports:
+      - "${FRONTEND_DEV_PORT:-3001}:3000"
     restart: unless-stopped
 
   # ------------------------------------------------------------------------
@@ -161,4 +199,12 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+  # Cache de Vite/watcher del frontend-dev. En volumen para que reiniciar el
+  # contenedor no obligue a recompilar el proyecto entero desde cero.
+  frontend_dev_cache:
 # ==========================================================================
+# Primera vez (tarda, compila el proyecto en memoria)
+# docker compose --profile dev up -d frontend-dev
+
+# Ver la recarga en acción
+# docker compose logs -f frontend-dev

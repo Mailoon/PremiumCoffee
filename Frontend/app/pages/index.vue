@@ -1,85 +1,217 @@
 <script setup lang="ts">
-// Pagina de arranque. Comprueba de un vistazo que la cadena completa funciona:
-// Nuxt (SSR) -> proxy -> backend Kotlin -> Supabase.
+// ==========================================================================
+// Portada (ruta "/").
+//
+// Esto NO es una pagina de datos: aqui no se consulta la API. Es la pantalla
+// de entrada, asi que no pide nada al backend y por eso carga siempre.
+//
+// Si alguna vez hiciera falta mostrar datos reales aqui, se pedirian con
+// useFetch() como en catalogo.vue. No se copia ese patron sin motivo.
+// ==========================================================================
 
-const { data, error, status } = await useFetch('/api/categories', {
-  query: { size: 5 }
+useHead({
+  title: 'Premium Coffee — Cafe de especialidad',
+  meta: [
+    {
+      name: 'description',
+      content:
+        'Cafe de especialidad de origen, con catalogo de variantes y visor 3D.'
+    }
+  ]
 })
+
+// --------------------------------------------------------------------------
+// Contenido estatico de la portada.
+//
+// Se declara aqui en vez de escribirlo en el <template> a pelo porque asi el
+// texto vive separado del marcado: cuando haya que editar un titular se toca
+// una linea de datos, no un bloque de HTML con mil etiquetas encima.
+// --------------------------------------------------------------------------
+const highlights = [
+  {
+    title: 'Cafe de especialidad',
+    text: 'Origen, proceso y notas de cata de cada grano, con lotes trazables.'
+  },
+  {
+    title: 'Variantes a medida',
+    text: 'Tamanos, molienda y formato: pedidos distintos sobre el mismo producto.'
+  },
+  {
+    title: 'Visor 3D',
+    text: 'El GLB lo carga Three.js en el navegador. El servidor solo envia URLs.'
+  },
+  {
+    title: 'Builder de componentes',
+    text: 'Vaso, liquido, crema y toppings activables pieza a pieza.'
+  }
+]
 </script>
 
 <template>
-  <section>
-    <h1>Premium Coffee</h1>
-    <p class="intro">
-      Catalogo de cafe de especialidad con visor 3D de variantes.
-    </p>
+  <section class="home">
+    <!-- ---------------------------------------------------------- hero -->
+    <div class="hero">
+      <p class="hero__eyebrow">Cafe de especialidad · Colombia</p>
+      <h1 class="hero__title">Premium Coffee</h1>
+      <p class="hero__lead">
+        Un catalogo de cafe de especialidad donde cada variante se puede ver en
+        3D antes de pedirla.
+      </p>
 
-    <div class="panel">
-      <h2>Estado de la cadena</h2>
+      <div class="hero__actions">
+        <NuxtLink to="/catalogo" class="btn btn--primary">Ver el catalogo</NuxtLink>
+        <a href="#como-funciona" class="btn">Como funciona</a>
+      </div>
+    </div>
 
-      <p v-if="status === 'pending'">Consultando el backend…</p>
+    <!-- ----------------------------------------------------- highlights -->
+    <div id="como-funciona" class="grid">
+      <article
+        v-for="item in highlights"
+        :key="item.title"
+        class="card"
+      >
+        <h2 class="card__title">{{ item.title }}</h2>
+        <p class="card__text">{{ item.text }}</p>
+      </article>
+    </div>
 
-      <div v-else-if="error" class="error">
-        <strong>No se pudo contactar el backend.</strong>
-        <p>{{ error.message }}</p>
-        <p class="hint">
-          Revisa que el servicio <code>backend</code> este levantado y que
-          <code>apiBase</code> apunte a <code>http://backend:8080</code>.
+    <!-- ------------------------------------------------------------ cta -->
+    <div class="cta">
+      <div>
+        <h2 class="cta__title">Todo empieza por el catalogo</h2>
+        <p class="cta__text">
+          Productos, variantes y precios vienen del backend. Esta portada solo
+          te presenta.
         </p>
       </div>
-
-      <template v-else>
-        <p>
-          Responde <code>/api/categories</code> y devolvio
-          <strong>{{ data?.totalElements ?? 0 }}</strong> categoria(s).
-        </p>
-        <ul v-if="data?.content?.length">
-          <li v-for="c in data.content" :key="c.id">{{ c.name }}</li>
-        </ul>
-      </template>
+      <NuxtLink to="/catalogo" class="btn btn--primary">Entrar al catalogo</NuxtLink>
     </div>
   </section>
 </template>
 
 <style scoped>
-h1 {
-  margin: 0 0 0.25rem;
-  font-size: 2rem;
+.home {
+  display: flex;
+  flex-direction: column;
+  gap: 3.5rem;
 }
 
-.intro {
-  color: var(--muted);
+/* --- hero ---------------------------------------------------------------- */
+.hero {
+  padding: 3rem 0 1rem;
+}
+
+.hero__eyebrow {
+  margin: 0 0 0.75rem;
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.hero__title {
+  margin: 0 0 0.75rem;
+  font-size: clamp(2.5rem, 6vw, 4rem);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.hero__lead {
   margin: 0 0 2rem;
+  max-width: 46ch;
+  color: var(--muted);
+  font-size: 1.1rem;
+  line-height: 1.6;
 }
 
-.panel {
+.hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+/* --- botones ------------------------------------------------------------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.7rem 1.4rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #1a1310;
+}
+
+.btn--primary:hover {
+  background: #d99b63;
+  color: #1a1310;
+}
+
+/* --- rejilla ------------------------------------------------------------- */
+.grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.card {
   border: 1px solid var(--border);
   background: var(--surface);
   border-radius: 10px;
-  padding: 1.25rem 1.5rem;
+  padding: 1.25rem 1.4rem;
 }
 
-.panel h2 {
-  margin-top: 0;
-  font-size: 0.95rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+.card__title {
+  margin: 0 0 0.4rem;
+  font-size: 1.02rem;
+}
+
+.card__text {
+  margin: 0;
   color: var(--muted);
+  font-size: 0.93rem;
+  line-height: 1.55;
 }
 
-.error {
-  color: #f0a5a5;
+/* --- cta ----------------------------------------------------------------- */
+.cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.75rem 2rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: linear-gradient(135deg, #241b16, var(--surface));
 }
 
-.hint {
+.cta__title {
+  margin: 0 0 0.35rem;
+  font-size: 1.3rem;
+}
+
+.cta__text {
+  margin: 0;
+  max-width: 48ch;
   color: var(--muted);
-  font-size: 0.9rem;
-}
-
-code {
-  background: #2c2320;
-  padding: 0.1rem 0.35rem;
-  border-radius: 4px;
-  font-size: 0.85em;
+  font-size: 0.93rem;
 }
 </style>
