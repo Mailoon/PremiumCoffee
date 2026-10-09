@@ -45,7 +45,7 @@ class ProductVariantMediaControllerTest {
             .setControllerAdvice(ApiExceptionHandler())
             .build()
 
-        mockMvc.perform(get("/product-variant-media"))
+        mockMvc.perform(get("/api/v1/product-variant-media"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.content[0].variantId").value(variant.id.toString()))
             .andExpect(jsonPath("$.content[0].mediaAssetId").value(asset.id.toString()))

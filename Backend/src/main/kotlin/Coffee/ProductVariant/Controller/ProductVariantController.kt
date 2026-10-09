@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
 @RestController
-@RequestMapping("/product-variants")
+@RequestMapping("/api/v1/product-variants")
 class ProductVariantController(
     service: ProductVariantService
 ) : AbstractCrudController<ProductVariant, UUID, ProductVariantRequest, ProductVariantResponse>(

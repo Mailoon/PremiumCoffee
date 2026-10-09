@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
 @RestController
-@RequestMapping("/variant-3d-components")
+@RequestMapping("/api/v1/variant-3d-components")
 class Variant3DComponentController(
     service: Variant3DComponentService
 ) : AbstractCrudController<Variant3DComponent, UUID, Variant3DComponentRequest, Variant3DComponentResponse>(

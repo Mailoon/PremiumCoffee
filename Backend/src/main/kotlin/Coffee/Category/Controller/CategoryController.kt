@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
 @RestController
-@RequestMapping("/categories")
+@RequestMapping("/api/v1/categories")
 class CategoryController(
     service: CategoryService
 ) : AbstractCrudController<Category, UUID, CategoryRequest, CategoryResponse>(

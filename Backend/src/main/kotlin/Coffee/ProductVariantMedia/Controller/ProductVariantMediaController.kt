@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
 @RestController
-@RequestMapping("/product-variant-media")
+@RequestMapping("/api/v1/product-variant-media")
 class ProductVariantMediaController(
     service: ProductVariantMediaService
 ) : AbstractCrudController<ProductVariantMedia, UUID, ProductVariantMediaRequest, ProductVariantMediaResponse>(

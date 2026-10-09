@@ -32,7 +32,7 @@ class CategoryControllerTest {
         )
 
         mockMvc(service)
-            .perform(get("/categories"))
+            .perform(get("/api/v1/categories"))
             .andExpect(status().isOk)
             .andExpect(content().json(
                 """
@@ -56,7 +56,7 @@ class CategoryControllerTest {
         )
 
         mockMvc(service)
-            .perform(get("/categories").param("page", "1").param("size", "5"))
+            .perform(get("/api/v1/categories").param("page", "1").param("size", "5"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.content[0].id").value(category.id.toString()))
             .andExpect(jsonPath("$.content[0].name").value("Coffee"))
@@ -68,7 +68,7 @@ class CategoryControllerTest {
         val service = Mockito.mock(CategoryService::class.java)
 
         mockMvc(service)
-            .perform(get("/categories").param("size", "101"))
+            .perform(get("/api/v1/categories").param("size", "101"))
             .andExpect(status().isBadRequest)
 
         Mockito.verifyNoInteractions(service)
@@ -83,7 +83,7 @@ class CategoryControllerTest {
         )
 
         mockMvc(service)
-            .perform(get("/categories/$id"))
+            .perform(get("/api/v1/categories/$id"))
             .andExpect(status().isNotFound)
     }
 
@@ -93,7 +93,7 @@ class CategoryControllerTest {
 
         mockMvc(service)
             .perform(
-                post("/categories")
+                post("/api/v1/categories")
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("""{"name":" ","slug":""}""")
             )
@@ -114,7 +114,7 @@ class CategoryControllerTest {
 
         mockMvc(service)
             .perform(
-                post("/categories")
+                post("/api/v1/categories")
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("""{"name":"Coffee","slug":"coffee"}""")
             )
@@ -130,7 +130,7 @@ class CategoryControllerTest {
         ).`when`(service).delete(id)
 
         mockMvc(service)
-            .perform(delete("/categories/$id"))
+            .perform(delete("/api/v1/categories/$id"))
             .andExpect(status().isConflict)
     }
 

@@ -18,7 +18,7 @@ import org.springframework.web.multipart.MultipartFile
 import java.util.UUID
 
 @RestController
-@RequestMapping("/media-assets")
+@RequestMapping("/api/v1/media-assets")
 class MediaAssetController(
     private val mediaAssetService: MediaAssetService
 ) : AbstractReadController<MediaAsset, UUID, MediaAssetResponse>(

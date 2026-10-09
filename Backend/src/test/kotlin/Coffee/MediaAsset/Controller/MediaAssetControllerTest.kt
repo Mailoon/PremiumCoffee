@@ -49,7 +49,7 @@ class MediaAssetControllerTest {
         val file = MockMultipartFile("file", "latte.png", "image/jpeg", MediaContentFixtures.PNG)
 
         mockMvc()
-            .perform(multipart("/media-assets/upload").file(file))
+            .perform(multipart("/api/v1/media-assets/upload").file(file))
             .andExpect(status().isCreated)
             .andExpect(jsonPath("$.assetType").value("IMAGE"))
             .andExpect(jsonPath("$.provider").value("CLOUDINARY"))
@@ -82,7 +82,7 @@ class MediaAssetControllerTest {
 
         mockMvc()
             .perform(
-                multipart("/media-assets/upload").file(
+                multipart("/api/v1/media-assets/upload").file(
                     MockMultipartFile("file", "milkshake.glb", null, MediaContentFixtures.GLB)
                 )
             )
@@ -100,7 +100,7 @@ class MediaAssetControllerTest {
     fun `answers 400 for a file that only pretends to be an image`() {
         mockMvc()
             .perform(
-                multipart("/media-assets/upload").file(
+                multipart("/api/v1/media-assets/upload").file(
                     MockMultipartFile("file", "photo.jpg", "image/jpeg", MediaContentFixtures.SQL)
                 )
             )
@@ -118,7 +118,7 @@ class MediaAssetControllerTest {
         val file = MockMultipartFile("file", "latte.png", "image/png", MediaContentFixtures.PNG)
 
         mockMvc()
-            .perform(multipart("/media-assets/upload").file(file))
+            .perform(multipart("/api/v1/media-assets/upload").file(file))
             .andExpect(status().isServiceUnavailable)
             .andExpect(jsonPath("$.detail").value("Storage provider 'CLOUDINARY' is not configured"))
     }
@@ -129,7 +129,7 @@ class MediaAssetControllerTest {
         val file = MockMultipartFile("file", "latte.png", "image/png", MediaContentFixtures.PNG)
 
         mockMvc()
-            .perform(multipart("/media-assets/upload").file(file))
+            .perform(multipart("/api/v1/media-assets/upload").file(file))
             .andExpect(status().isBadGateway)
             .andExpect(jsonPath("$.detail").value("Cloudinary rejected the upload of 'latte.png'"))
     }
@@ -138,7 +138,7 @@ class MediaAssetControllerTest {
     fun `answers 400 for an empty file`() {
         mockMvc()
             .perform(
-                multipart("/media-assets/upload")
+                multipart("/api/v1/media-assets/upload")
                     .file(MockMultipartFile("file", "latte.jpg", "image/jpeg", ByteArray(0)))
             )
             .andExpect(status().isBadRequest)
@@ -162,7 +162,7 @@ class MediaAssetControllerTest {
         )
 
         mockMvc()
-            .perform(get("/media-assets/$id/url"))
+            .perform(get("/api/v1/media-assets/$id/url"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.publicId").value("premiumcoffee/latte"))
             .andExpect(
@@ -178,14 +178,14 @@ class MediaAssetControllerTest {
         Mockito.`when`(repository.findById(id)).thenReturn(Optional.empty())
 
         mockMvc()
-            .perform(get("/media-assets/$id/url"))
+            .perform(get("/api/v1/media-assets/$id/url"))
             .andExpect(status().isNotFound)
     }
 
     @Test
     fun `does not accept a create so the client cannot forge a row`() {
         val status = statusOf(
-            post("/media-assets")
+            post("/api/v1/media-assets")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
                     """
@@ -200,7 +200,7 @@ class MediaAssetControllerTest {
                 )
         )
 
-        assertEquals(405, status, "POST /media-assets must not stay mapped")
+        assertEquals(405, status, "POST /api/v1/media-assets must not stay mapped")
         Mockito.verifyNoInteractions(repository)
     }
 
@@ -208,14 +208,14 @@ class MediaAssetControllerTest {
     fun `does not accept an update so the client cannot redirect a stored url`() {
         val id = UUID.randomUUID()
         val status = statusOf(
-            put("/media-assets/$id")
+            put("/api/v1/media-assets/$id")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
                     """{"assetType":"IMAGE","provider":"CLOUDINARY","storageKey":"a","url":"https://evil.test/x.png"}"""
                 )
         )
 
-        assertEquals(405, status, "PUT /media-assets/{id} must not stay mapped")
+        assertEquals(405, status, "PUT /api/v1/media-assets/{id} must not stay mapped")
         Mockito.verifyNoInteractions(repository)
     }
 
@@ -235,7 +235,7 @@ class MediaAssetControllerTest {
         )
 
         mockMvc()
-            .perform(delete("/media-assets/$id"))
+            .perform(delete("/api/v1/media-assets/$id"))
             .andExpect(status().isNoContent)
 
         assertEquals(listOf("premiumcoffee/latte"), storage.deleted)
