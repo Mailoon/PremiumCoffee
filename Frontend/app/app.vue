@@ -1,69 +1,62 @@
+<script setup lang="ts">
+// ==========================================================================
+// Contenedor raiz. Aporta el cromo comun (marca, nav, conmutador de tema).
+// El color, el espacio y el tipo salen todos de los tokens de
+// assets/css/main.css: aqui no hay ni un literal.
+// ==========================================================================
+
+const { isDark, toggle } = useTheme()
+
+// El atributo va en el <html> y NO en un div. Eso es lo que hace que
+// `dark:` responda al tema y lo que evita el parpadeo: como la preferencia
+// llega por cookie, useHead la resuelve en el servidor y el HTML ya sale
+// con la clase correcta.
+//
+// Ojo: `htmlAttrs.class` administra el atributo entero. Si algun dia se anade
+// otra clase al <html> desde fuera, hay que acumularla aqui o se perdera.
+useHead({
+  htmlAttrs: {
+    class: computed(() => (isDark.value ? 'dark' : 'light'))
+  }
+})
+</script>
+
 <template>
-  <div class="shell">
-    <header class="shell__header">
-      <NuxtLink to="/" class="brand">Premium Coffee</NuxtLink>
-      <nav>
-        <NuxtLink to="/catalogo">Catalogo</NuxtLink>
+  <div class="min-h-dvh bg-bg text-text">
+    <header class="shell__header border-b border-border">
+      <NuxtLink to="/" class="text-lg font-bold text-text no-underline">
+        Premium Coffee
+      </NuxtLink>
+
+      <nav class="flex items-center gap-5">
+        <NuxtLink
+          to="/catalogo"
+          class="text-muted no-underline transition-colors hover:text-accent"
+        >
+          Catalogo
+        </NuxtLink>
+
+        <!-- aria-pressed en vez de aria-label: un boton que conmuta necesita
+             decir su estado actual, no solo que existe. Un lector de pantalla
+             anuncia "alternado" y con eso ya sabe si esta en claro o oscuro. -->
+        <button
+          type="button"
+          class="rounded-pill border border-border px-3 py-1.5 text-sm font-semibold
+                 text-muted transition-colors
+                 hover:border-accent hover:text-accent
+                 focus-visible:outline-2 focus-visible:outline-offset-2
+                 focus-visible:outline-accent"
+          :aria-pressed="isDark"
+          :aria-label="isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'"
+          @click="toggle"
+        >
+          {{ isDark ? 'Claro' : 'Oscuro' }}
+        </button>
       </nav>
     </header>
 
-    <main class="shell__main">
+    <main class="mx-auto w-full max-w-[1100px] px-4 py-8 sm:px-8">
       <NuxtPage />
     </main>
   </div>
 </template>
-
-<style>
-:root {
-  color-scheme: dark;
-  --bg: #14100e;
-  --surface: #1e1815;
-  --border: #3a2f29;
-  --text: #f2e9e3;
-  --muted: #a3928a;
-  --accent: #c98b52;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
-}
-
-.shell__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 1rem 2rem;
-  border-bottom: 1px solid var(--border);
-}
-
-.brand {
-  font-weight: 700;
-  font-size: 1.15rem;
-  color: var(--text);
-  text-decoration: none;
-}
-
-.shell__header nav a {
-  color: var(--muted);
-  text-decoration: none;
-  margin-left: 1.25rem;
-}
-
-.shell__header nav a:hover {
-  color: var(--accent);
-}
-
-.shell__main {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 2rem;
-}
-</style>

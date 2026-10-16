@@ -1,4 +1,6 @@
-﻿const isProd = process.env.NODE_ENV === 'production'
+﻿import tailwindcss from '@tailwindcss/vite'
+
+const isProd = process.env.NODE_ENV === 'production'
 
 // ==========================================================================
 // Content-Security-Policy
@@ -77,6 +79,11 @@ export default defineNuxtConfig({
   // El orden importa: este modulo se instala despues del nucleo de Nuxt, que
   // es lo que mete el plugin de Volar roto en los tsconfigs. Va el ultimo.
   modules: ['nuxt-security', './modules/vue-compiler-plugins-cleanup'],
+  vite: {
+    plugins: [tailwindcss()]
+  },
+
+  css: ['~/assets/css/main.css'],
 
   security: {
     // Genera un nonce por peticion. Necesario para que el HTML y la cabecera
@@ -114,13 +121,6 @@ export default defineNuxtConfig({
   },
 
   typescript: {
-    // Los tsconfigs que Nuxt genera en .nuxt/ traen `compilerOptions.types: []`,
-    // es decir, ningun @types se incluye solo. Sin esto, nuxt.config.ts da
-    // error TS2591 en la linea 1 (`process.env`) porque no existe `process`.
-    //
-    // `nodeTsConfig` es el que se aplica a .nuxt/tsconfig.node.json, que es el
-    // unico proyecto que incluye nuxt.config.ts. Los tipos de Node solo hacen
-    // falta ahi: en app/ y server/ no se usan y no se arrastran.
     nodeTsConfig: {
       compilerOptions: {
         types: ['node']

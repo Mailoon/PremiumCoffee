@@ -15,7 +15,9 @@
     "prepare-types": "nuxt prepare"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.6.5",
+    "tailwindcss": "^4.3.3",
     "typescript": "~5.9.3",
     "vue-tsc": "^3.3.13"
   },
