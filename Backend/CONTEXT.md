@@ -57,7 +57,15 @@ interface MediaStorage {
 // Implementations: CloudinaryMediaStorage (done), MinioMediaStorage (planned)
 ```
 
-The port has no `getUrl` on purpose: the delivery URL that the provider returns on upload is stored in `media_assets.url` and served from there. Cloudinary 2.x signs every generated URL with an expiring `?_a=` token, so deriving URLs later is not an option.
+The port has no `getUrl` on purpose: the delivery URL that the provider returns on upload is stored in `media_assets.url` and served from there.
+
+**Those stored URLs are public, unsigned and permanent — they do not expire.** This was verified against `cloudinary-core-2.4.0-sources.jar`, not assumed. A signed URL only appears under three conditions, and none of them is met here:
+
+* `Url.signUrl` is a plain `boolean` with no initializer, so it defaults to `false`. The signature block at `Url.java:398` is gated on `if (signUrl && ...)`, and `signed(true)` is never called by this project.
+* No `AuthToken` is configured, so the `__cld_token__` parameter (`AuthToken.java:22`) is never emitted.
+* No `type` (delivery type) is sent, so uploads default to `upload`, which is the public type. Signing is only required for `private` and `authenticated` assets, and for `access_type: token`.
+
+So `media_assets.url` can be trusted as a durable URL. If the project ever needs private media, that decision changes: the delivery type has to be set at upload time, and then a `getUrl` on the port becomes necessary because a URL would have to be signed on demand.
 
 ---
 
@@ -133,17 +141,47 @@ Entity conventions note: `Category`, `Product` and `ProductVariant` carry `updat
 Flow: `MediaAssetController` → `MediaAssetService` → `MediaStorage` port → provider → row in `media_assets`.
 
 * `MediaStorage.kt`, `MediaUpload.kt`, `StoredMedia.kt` are plain Kotlin (no Spring, no SDK)
-* `Cloudinary/CloudinaryMediaStorage.kt` is the only class that knows the SDK; `Cloudinary/CloudinarySettings.kt` builds its configuration
+* **Three adapters now exist**: `Cloudinary/CloudinaryMediaStorage.kt`, `Local/LocalMediaStorage.kt`, and `DisabledMediaStorage.kt` (fallback so the app always starts). The port is what makes them swappable: no service, repository or controller knows which one is active.
+* **Provider precedence is explicit.** `MediaStorageConfiguration` declares a single bean with a `when` over `media.local.enabled`, then `media.cloudinary.enabled`, then the fallback. It is deliberately NOT two `@ConditionalOnProperty` methods: enabling both would register two beans of the same type, and Spring promises no order for `@Bean` methods of one class, so "declared first wins" is not a rule to rely on.
+* `Cloudinary/CloudinaryMediaStorage.kt` is the only class that knows the Cloudinary SDK; `Cloudinary/CloudinarySettings.kt` builds its configuration
 * Cloudinary SDK gotcha: the `http5` module only accepts a `File`, a local path `String` or a `byte[]` as the file parameter, and it fails at runtime with `IOException: Unrecognized file parameter` for anything else. The Java signature is `upload(Object file, Map options)`, so **the compiler does not protect us**. `CloudinaryMediaStorage` therefore sends `media.content` (a `ByteArray`) through a private `uploadBytes(content: ByteArray, ...)` method, which is the only path to the SDK, and a test pins that contract
 * `DisabledMediaStorage.kt` is the fallback used when `CLOUDINARY_ENABLED` is false, so the app always starts
 * `Configuration/MediaStorageConfiguration.kt` declares the single `MediaStorage` bean conditionally
 * Endpoints: `POST /media-assets/upload` (multipart `file`, 201) and `GET /media-assets/{id}/url` (returns the stored `publicId` and `url` without contacting the provider)
 * **`media-assets` is not a full CRUD resource.** It extends `AbstractReadController`, so `POST /media-assets` and `PUT /media-assets/{id}` do not exist (405). A row can only enter the table through the upload flow. This matters because the generic `POST /resource` let the client pick `provider`, `storage_key`, `public_id`, `url` and `mime_type`, which is exactly what the inspection rules below exist to prevent; there was also no auth at all. Use `GET /media-assets`, `GET /media-assets/{id}`, `POST /media-assets/upload`, `GET /media-assets/{id}/url` and `DELETE /media-assets/{id}`
 * Environment variables: `CLOUDINARY_ENABLED`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_FOLDER` (default `premiumcoffee`). Real values live in the gitignored `.env`
+* Local storage environment variables: `MEDIA_LOCAL_ENABLED`, `MEDIA_LOCAL_ROOT` (default `/srv/media`), `MEDIA_LOCAL_PUBLIC_PATH` (default `/media`)
 * Uploads are limited to 10MB (`spring.servlet.multipart.max-file-size`): an oversized file returns 413. The limit is global, so a GLB above 10MB is currently rejected too
 * Errors: 400 empty file or unrecognized content, 404 missing asset or missing stored URL, 413 oversized file, 502 provider failure (`MediaStorageException`), 503 provider not configured
 
-Security rules applied in this slice:
+## Local media storage — content hash, served by Caddy (implemented)
+
+`LocalMediaStorage` writes the bytes to disk and Caddy serves them. Kotlin never streams a file.
+
+**The key is the SHA-256 of the content, not the row id:**
+
+```
+sha256/<first 2 hex chars>/<full 64 hex>.<verified extension>
+```
+
+Two consequences, and they are the whole point of the design:
+
+* The same bytes uploaded twice produce the same URL, so the browser serves the second copy from cache instead of downloading it again.
+* Different bytes produce a different URL, so the old one stops being used on its own.
+
+Cache invalidation stops being something the project has to remember to do. It is also why Caddy can safely send `Cache-Control: immutable, max-age=31536000`: no URL can ever change what it serves, which is exactly what `immutable` asserts. **For that same reason the adapter never overwrites an existing file** — a client holding it cached for a year would otherwise see stale bytes indefinitely.
+
+**Security rules that come with it:**
+
+* The extension comes from `DetectedFormat`, derived from the first 512 bytes of the upload, never from the client file name. A path built from a verified extension cannot traverse, which is why `MediaUpload.verifiedExtension` is its own field instead of reusing `fileName`.
+* `resolveInsideRoot` re-checks that the resolved path stays inside the root. The key is hex so this is defence in depth, but `delete` receives a value read back from the database, and that is only as trustworthy as the database.
+* Writes go through a temporary file plus an atomic move, so a reader never observes a half written asset and no `.tmp` file is left behind.
+
+**Why Caddy and not Spring:** a 30 MB GLB read into a JVM heap whose only job is to copy bytes is slow and an easy way to get the process killed. `docker-compose.yml` mounts the `media` volume `rw` for the backend and `ro` for Caddy, and the Caddyfile serves it with `file_server` under `handle /media/*`.
+
+**Security consequence worth stating:** same-origin media means the frontend CSP only needs `img-src 'self'` and `connect-src 'self'`. Every external origin that must be allowed is a channel an injected script could try to use.
+
+## Media upload — security rules applied in this slice
 * The content is verified from its own bytes before any provider call: `Content/MediaContentInspector.kt` reads only the first 512 bytes and returns a `DetectedFormat` (`JPEG`, `PNG`, `GIF`, `WEBP`, `AVIF`, `HEIC`, `SVG`, `GLB`) or `null`. An unrecognized file is rejected with 400 and the storage port is never called
 * `mime_type` and `asset_type` are derived from that verified format, never from the file name, the extension, or the `contentType` claimed by the client. `Content/DetectedFormat.kt` owns the single mapping to mime type and to `MediaAssetType` (a GLB becomes `MODEL_3D` + `model/gltf-binary`, an SVG becomes `SVG` + `image/svg+xml`)
 * The provider is a second layer: `CloudinaryMediaStorage` sends `resource_type: "image"` (required by Cloudinary to accept 3D models) and `allowed_formats` = `jpg, jpeg, png, gif, webp, avif, heic, svg, glb`
@@ -161,6 +199,24 @@ Deliberately deferred (documented, not implemented):
 * Cleaning up an orphaned remote file when the database insert fails after a successful upload (needs a job, not an endpoint)
 * `MinioMediaStorage` and `S3MediaStorage` (the port already allows adding them without touching the services)
 
+## Catalog read model — one call, images separated from 3D (implemented)
+
+`GET /api/v1/catalog` returns the whole storefront tree in a single request.
+
+**Why it exists.** `ProductVariantMediaResponse` carries only `mediaAssetId`, so rendering a gallery meant one extra call per image to turn that id into a URL: an N+1. The entities only model the child to parent direction (`product.category`, `mediaAsset.variant`), so the tree cannot be walked from the root, and walking it that way is what produced the problem.
+
+**How it works.** Five queries, one per table, then grouping in memory in `CatalogService`. `join fetch` is mandatory rather than an optimisation: `open-in-view=false` means a lazy association touched outside a transaction throws.
+
+**`images` and `models3d` are separate lists** because they have different consumers. The split is on `MediaAssetType`, **not** on `VariantMediaRole`: a variant may legitimately carry a `MODEL_3D` role pointing at an image, or an `IMAGE` role pointing at a GLB, and trusting the role would put a 3D file in an `<img>` tag. SVG counts as an image because it renders in an `<img>` tag like any other.
+
+**Other decisions:**
+
+* Only root categories (`parent is null`) are returned; a child is reachable through its parent's products.
+* Only active rows, and only media with a stored URL — an asset without one is dropped rather than returned with a null the frontend would have to check on every row.
+* Overlapping price windows are legal in the schema, so `findEffectiveAt` orders by `validFrom` and the service takes the last one, the most recently started.
+* It does not replace the per-aggregate CRUD endpoints, which stay for administration and remain the write path.
+* The whole catalog is materialised in memory. That is the right trade for tens of products and the wrong one for thousands. If the catalog grows this becomes a cached read rather than a bigger query, and the response shape does not have to change.
+
 ## Applied migrations — `src/main/resources/db/migration/`
 
 | Migration | Purpose |
@@ -169,6 +225,7 @@ Deliberately deferred (documented, not implemented):
 | `V2__crear_tablas_catalogo.sql` | Creates all seven catalog tables in one migration |
 | `V3__ajustar_currency_a_varchar.sql` | Changes `currency` from `CHAR(3)` to `VARCHAR(3)` (detected by `validate`: bpchar ≠ varchar) |
 | `V4__unicidad_media_primaria.sql` | Makes `product_variant_media.is_primary` mirror `role = 'PRIMARY'` (CHECK) and allows at most one primary media per variant (partial unique index) |
+| `V6__anadir_proveedor_local.sql` | Adds `LOCAL` to the `chk_media_provider` constraint, required by `LocalMediaStorage` |
 
 V4 in detail: `is_primary` and `role = 'PRIMARY'` were two independent sources of truth for the same fact, so a variant could end up with several primaries, or with a thumbnail flagged as primary while the 3D viewer picks assets by `is_primary`. The migration normalizes the existing rows first, then drops the duplicates (oldest wins), then adds `chk_variant_media_primary_role` and the partial index `uq_variant_media_one_primary`. Both violations surface as 409 through the existing `ApiExceptionHandler` (`23505`/`23514`), so no Kotlin change was needed.
 
@@ -249,23 +306,49 @@ The `variant_3d_components` table already exists with: id, variant_id, name, cod
 
 ---
 
-# 3D viewer (future)
+# 3D scope decision — store and show, do NOT generate
 
-Three.js handles GLB loading, rotation, zoom, camera, lighting, materials, components, and interaction.
+**Decision: the 3D phase delivers the storage, the pipeline and the viewer. Model generation is explicitly out of scope, and stays open for later.**
 
-The Kotlin backend does not render the 3D content. It manages variants and assets, validates options, returns URLs, and handles business rules.
+This is a scope boundary, not a rejection. The goal is to be able to upload `.glb` files, store them, and see how they look — which unblocks the viewer, the Builder and the asset pipeline without waiting on anything that needs a GPU.
 
-SSR with Next.js does not render the 3D content. It delivers the name, description, price, variant information, poster, and SEO metadata; the browser then initializes Three.js and loads the GLB.
+### In scope
+
+* Uploading a `.glb` through the existing `POST /api/v1/media-assets/upload` endpoint. The content inspector already recognises the `glTF` magic bytes and returns `DetectedFormat.GLB` (`model/gltf-binary`, `MediaAssetType.MODEL_3D`), so no change is needed there.
+* Storing it as a `media_assets` row and serving `media_assets.url`.
+* Producing a small set of **test models authored by hand** (Blender or equivalent), uploading them, and using them to see the real result: how a GLB looks in the viewer, how heavy it is in practice, and whether the pipeline behaves.
+* Assembling a variant from parts through the existing `variant_3d_components` table, which already exists.
+
+**How the models are produced is irrelevant to this decision.** Whether a `.glb` comes from an artist, from an export, or later from a generator, the backend treats it identically: bytes in, row out. That is exactly why generation can be added later without touching anything built now.
+
+### Out of scope
+
+* Any image-to-3D service, GPU work, or `POST /api/v1/generations`. See the next section.
+* Server-side mesh processing, optimization or conversion.
+
+### What this makes possible without any generator
+
+`variant_3d_components` already supports the composite model: a base (the cup) plus components that the Builder can enable or disable (`required`, `default_enabled`). A chocolate milkshake is then `liquid` + `cream` + `chocolate` + `oreo`, each a small separate `.glb` that loads only when the component is switched on. Each part is small, caches well, and gives the user real control — the same outcome generation would approximate, but deterministic and without a GPU.
+
+### Open, not closed
+
+Generation remains a valid later phase (see below). Nothing in this decision forecloses it. If a generator is ever added, it produces a `.glb` and uploads it through the same endpoint that already exists. The `generations` job API stays a future addition.
 
 ---
 
 # GLB generation (future, independent, and deferred)
+
+**Still open. Deliberately deferred, not cancelled.** The 3D scope decision above builds the storage and viewing path first so this can be added later without rework: a generated model arrives as a `.glb` and goes through the same upload endpoint as a hand-authored one.
 
 * Explore free or local 3D model generation (open source: Hunyuan3D, TripoSR, or other options).
 * Independent service, possibly requiring a GPU, with asynchronous jobs:
   `POST /api/v1/generations` → `{ jobId, status: "PROCESSING" }`, followed by `GET /api/v1/generations/{jobId}`.
 * Flow: Image → 3D Generation Service → Mesh → Texture → Optimization → GLB → MinIO/Cloudinary → `media_assets`.
 * Future possibility: procedural generation (SVG/profile → Extrude/Revolve → Mesh → GLB) for cups, glasses, and containers. Do not implement it yet.
+
+### Compression is a separate concern from generation
+
+Draco (geometry) and KTX2 (textures) do not create models. They compress a GLB that already exists, typically cutting 60–80% of the size, and they require a matching decoder in the viewer (`DRACOLoader` / `KTX2Loader`). Note that the Draco decoder is WebAssembly, so the frontend CSP needs `'wasm-unsafe-eval'` in `script-src` or `WebAssembly.instantiate()` fails with a `CompileError`. That keyword permits WASM compilation only; it does not enable `eval()`.
 
 ---
 
@@ -334,11 +417,11 @@ PHASE 2 — Spring Boot + Clean Architecture → catalog CRUD, validations, REST
 
 PHASE 3 — Media → `MediaStorage`, MinIO, images, SVG, metadata — **partially done**: the port, the Cloudinary adapter, the upload endpoint, the content allowlist, the safe delete, and the SVG/GLB uploads are implemented; MinIO is pending.
 
-PHASE 4 — 3D → GLB, variant/GLB relationship, asset endpoint, Next.js, Three.js, 3D viewer — **pending**.
+PHASE 4 — 3D → GLB upload and storage, variant/GLB relationship, Three.js, 3D viewer — **pending**. Scope: store and display only; see *3D scope decision*. Test models are authored by hand to validate the pipeline. A note on the previous wording: the frontend is Nuxt, not Next.js.
 
 PHASE 5 — Builder → 3D components, toppings, materials, options, business rules, price calculation — **pending** (the `variant_3d_components` table already exists).
 
-PHASE 6 — 3D Generation → independent service, image-to-3D, asynchronous jobs, GLB, storage — **pending**.
+PHASE 6 — 3D Generation → independent service, image-to-3D, asynchronous jobs, GLB, storage — **pending and still open**. Deferred, not cancelled: it depends on PHASE 4 landing first, and a generated model reuses the upload endpoint that PHASE 4 builds.
 
 PHASE 7 — Performance → CDN, caching, compression, lazy loading, GLB optimization, observability — **pending**.
 

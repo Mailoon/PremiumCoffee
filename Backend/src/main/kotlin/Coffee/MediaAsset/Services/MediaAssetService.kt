@@ -40,7 +40,8 @@ class MediaAssetService(
             MediaUpload(
                 fileName = fileName ?: DEFAULT_FILE_NAME,
                 contentType = file.contentType,
-                content = file.bytes
+                content = file.bytes,
+                verifiedExtension = detected.extension
             )
         )
 

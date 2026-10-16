@@ -1,0 +1,55 @@
+{
+  // ==========================================================================
+  // Raiz de TypeScript. Este archivo conecta los tsconfigs que genera Nuxt.
+  //
+  // Nuxt NO escribe un tsconfig en la raiz: escribe cuatro dentro de .nuxt/, y
+  // los regenera en cada `nuxt prepare`. Este archivo solo los referencia.
+  // Si se editara el contenido de uno de ellos, se perderia en el siguiente
+  // build.
+  //
+  //   .nuxt/tsconfig.app.json     -> app/ (paginas, componentes, stores)
+  //   .nuxt/tsconfig.server.json  -> server/ (el proxy Nitro) y runtime
+  //   .nuxt/tsconfig.shared.json  -> shared/
+  //   .nuxt/tsconfig.node.json    -> nuxt.config.ts y tooling
+  //
+  // "files": [] es obligatorio en un tsconfig raiz de estilo "solution": es
+  // lo que le dice a TypeScript que este archivo no tiene fuentes propios y
+  // que todo el codigo vive en los proyectos referenciados.
+  //
+  // --------------------------------------------------------------------------
+  // POR QUE REFERENCES Y NO "extends"
+  //
+  // La forma antigua era `extends: "./.nuxt/tsconfig.json"`. Funciona, pero
+  // arrastra un aviso de Volar que NO es un fallo de este proyecto:
+  //
+  //   [Vue] Resolve plugin path failed: vue-router/volar/sfc-route-blocks
+  //   Error [ERR_PACKAGE_PATH_NOT_EXPORTED]
+  //
+  // Nuxt pone ese plugin en los vueCompilerOptions de sus tsconfigs. El
+  // plugin sirve para los bloques <route> de vue-router, y vue-router 4.6.4
+  // ya no lo exporta en su package.json. Volar lo intenta resolver, falla, y
+  // se lo come con un try/catch, asi que el typecheck continua bien: pero el
+  // mensaje sale igual en cada ejecucion, en el IDE y en consola, y parece un
+  // error del proyecto cuando no lo es.
+  //
+  // Con "references", TypeScript NO lee .nuxt/tsconfig.json como un "extends",
+  // asi que Volar nunca llega a intentar resolver ese plugin y el aviso no
+  // aparece. El codigo sale igual de tipado.
+  //
+  // El plugin no hace falta: Nuxt declara las rutas con
+  // definePageMeta({ path: '...' }), nunca con bloques <route>.
+  //
+  // OJO: con references hay que comprobar con MODO BUILD (vue-tsc -b), no con
+  // `vue-tsc --noEmit`. Sin -b, un tsconfig con "files": [] no comprueba nada
+  // y sale todo verde sin haber mirado un solo archivo. El script "typecheck"
+  // de package.json ya usa -b por eso.
+  // ==========================================================================
+  "files": [],
+
+  "references": [
+    { "path": "./.nuxt/tsconfig.app.json" },
+    { "path": "./.nuxt/tsconfig.server.json" },
+    { "path": "./.nuxt/tsconfig.shared.json" },
+    { "path": "./.nuxt/tsconfig.node.json" }
+  ]
+}

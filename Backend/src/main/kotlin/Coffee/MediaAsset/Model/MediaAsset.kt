@@ -11,7 +11,7 @@ import java.util.UUID
 
 enum class MediaAssetType { IMAGE, SVG, MODEL_3D }
 
-enum class MediaProvider { CLOUDINARY, MINIO, S3 }
+enum class MediaProvider { LOCAL, CLOUDINARY, MINIO, S3 }
 
 @Entity
 @Table(name = "media_assets")

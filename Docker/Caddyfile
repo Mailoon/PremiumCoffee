@@ -1,4 +1,4 @@
-# ==========================================================================
+﻿# ==========================================================================
 # Caddy como reverse proxy — UN SOLO ORIGEN con TLS
 #
 # Esto es una CAPA DE PRODUCCION. En local, el navegador puede hablar
@@ -37,12 +37,24 @@ localhost {
 	# Sin esto, Caddy se quejaria de que todos los virtual hosts son HTTP.
 	encode zstd gzip
 
-	# Cabeceras de seguridad basicas. Se pueden activar por Dockerfile con
-	# https://caddyserver.com/docs/caddyfile/options, pero cuidado: CSP
-	# romperia Three.js si se restringen los scripts inline.
+	# Cabeceras de seguridad.
+	#
+	# Aqui SOLO queda -Server. Las demas (CSP, HSTS, X-Frame-Options,
+	# Referrer-Policy, X-Content-Type-Options...) las emite el modulo
+	# nuxt-security desde Nitro, en Frontend/nuxt.config.ts. No se duplican a
+	# proposito: dos capas emitiendo la misma cabecera obligan a mantenerlas
+	# sincronizadas, y en el caso del CSP ese duplicado rompe la pagina.
+	#
+	# El CSP NO puede vivir aqui por una razon tecnica: usa un nonce distinto
+	# en cada peticion, y solo la capa que RENDERIZA el HTML puede generar ese
+	# nonce e inyectarlo en sus <script>. Un proxy que solo reenvia cabeceras no
+	# ve el HTML, asi que el nonce que pone nunca coincide con el del documento
+	# y el navegador bloquea todos los scripts.
+	#
+	# -Server si se queda aqui porque Caddy lo añade en las respuestas de error
+	# propias (por ejemplo el 502 cuando Nuxt no arranca), que no pasan por
+	# Nitro y por tanto no llevan las cabeceras de este.
 	header {
-		X-Content-Type-Options nosniff
-		Referrer-Policy strict-origin-when-cross-origin
 		-Server
 	}
 
@@ -55,6 +67,40 @@ localhost {
 
 	handle /api/* {
 		reverse_proxy frontend:3000
+	}
+
+	# ---- Media local servida desde disco, SIN pasar por Kotlin -------------
+	#
+	# Esto es lo que hace que la JVM no toque nunca los bytes de una imagen ni de
+	# un .glb. Spring solo escribe el archivo y guarda la fila; Caddy lo sirve
+	# leyendo el directorio. Un modelo de 30 MB en el heap de la JVM seria leerlo
+	# entero para copiarlo, que es lento y una forma sencilla de que la maten.
+	#
+	# root: el MISMO MEDIA_LOCAL_ROOT que recibe el backend. Deben apuntar al
+	# mismo volumen.
+	#
+	# Cache-Control: immutable. El nombre del archivo es el SHA-256 del
+	# contenido, asi que dos archivos con el mismo nombre son el mismo archivo,
+	# byte a byte. Si el contenido cambia, el nombre cambia, y por tanto cambia
+	# la URL. Eso convierte "no volver a descargar lo que ya tengo" en una
+# garantia, no en una suposicion. Y es seguro usar un max-age de un ano porque
+	# existe ninguna URL cuyo contenido cambie nunca.
+	#
+	# OJO: por esto el backend NUNCA debe sobrescribir un archivo ya existente en
+	# esa ruta. Si lo hiciera, un cliente que ya lo tiene cacheado 365 dias
+	# estaria viendo el contenido viejo para siempre.
+	#
+	# file_server va con encode para que las imagenes que si sean comprimibles
+	# (.svg, .json) travelen por gzip.
+	handle /media/* {
+		root * /srv/media
+		header {
+			Cache-Control "public, max-age=31536000, immutable"
+			X-Content-Type-Options nosniff
+		}
+		file_server {
+			encode zstd gzip
+		}
 	}
 
 	handle {

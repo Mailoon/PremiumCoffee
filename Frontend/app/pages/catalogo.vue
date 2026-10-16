@@ -1,5 +1,10 @@
 <script setup lang="ts">
-const { data, error, status } = await useFetch('/api/categories', {
+import type { CategoryResponse, PageResponse } from '~/types/api'
+
+// El tipo de la respuesta se declara aqui a proposito. Sin el, useFetch
+// devuelve un `{}` generico y `data.totalElements` deja de existir para el
+// compilador (error TS2339). Los tipos viven en app/types/api.ts y son la transcripcion de los data class de Kotlin.
+const { data, error, status } = await useFetch<PageResponse<CategoryResponse>>('/api/categories', {
   query: { size: 5 }
 })
 </script>

@@ -23,12 +23,6 @@
 
 import { defineEventHandler, getRouterParam, getQuery, setHeader, type H3Event } from 'h3'
 
-/**
- * Version de la API de Kotlin a la que se reenvia.
- *
- * NO cambiar esto por otra version sin revisar los tests del proxy: es el
- * unico punto del frontend que conoce el versionado.
- */
 const API_VERSION_PREFIX = '/api/v1'
 
 export default defineEventHandler(async (event: H3Event) => {
@@ -39,18 +33,9 @@ export default defineEventHandler(async (event: H3Event) => {
   const path = getRouterParam(event, 'path') ?? ''
 
   const target = `${config.apiBase}${API_VERSION_PREFIX}/${path}`
-
-  // Query string con getQuery(), NO con event.node.req.query.
-  //
-  // Es un detalle que fallo en silencio y rompio la paginacion entera:
-  // req.query llega VACIO cuando la ruta usa un comodin, asi que un
-  // "?page=2&size=7" se perdia y el backend respondia con sus defaults
-  // page=0 size=20. Como la respuesta era 200 igual, nada delata el fallo:
-  // solo se nota que la pagina 2 nunca trae datos.
-  // getQuery() lee la URL cruda del evento y si funciona con comodines.
   const query = getQuery(event) as Record<string, string>
 
-  const method = event.method as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
+  const method = event.method
   const hasBody = method !== 'GET' && method !== 'HEAD'
 
   try {

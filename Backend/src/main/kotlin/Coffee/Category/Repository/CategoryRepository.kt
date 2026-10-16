@@ -7,6 +7,7 @@ import Coffee.Common.Ports.CrudRepositoryPort
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Query
 import java.util.UUID
 
 interface CategoryRepository : JpaRepository<Category, UUID>, CrudRepositoryPort<Category, UUID> {
@@ -21,4 +22,18 @@ interface CategoryRepository : JpaRepository<Category, UUID>, CrudRepositoryPort
             totalPages = result.totalPages
         )
     }
+
+    /**
+     * Read by the assembled catalog. Only root categories: a child category is
+     * reachable through its parent's products, and returning it again would
+     * duplicate the whole subtree in the response.
+     */
+    @Query(
+        """
+        select c from Category c
+        where c.active = true and c.parent is null
+        order by c.name asc
+        """
+    )
+    fun findActiveRoots(): List<Category>
 }

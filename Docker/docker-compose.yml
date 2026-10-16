@@ -112,6 +112,9 @@ services:
       - "${CADDY_HTTP_PORT:-8081}:80"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Mismo volumen que usa el backend para escribir. Caddy lo lee y lo sirve
+      # con file_server; Kotlin nunca vuelve a tocar estos bytes.
+      - media:/srv/media:ro
       - caddy_data:/data
       - caddy_config:/config
     restart: unless-stopped
@@ -175,11 +178,26 @@ services:
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
       CLOUDINARY_FOLDER: ${CLOUDINARY_FOLDER:-premiumcoffee}
 
+      # --- Media local ---
+      # Escribe en el volumen `media`, que Caddy lee en modo solo. Con esto la
+      # JVM nunca sirve un archivo: solo lo guarda y anota la fila.
+      MEDIA_LOCAL_ENABLED: ${MEDIA_LOCAL_ENABLED:-false}
+      MEDIA_LOCAL_ROOT: ${MEDIA_LOCAL_ROOT:-/srv/media}
+      MEDIA_LOCAL_PUBLIC_PATH: ${MEDIA_LOCAL_PUBLIC_PATH:-/media}
+
+      # --- Media local ---
+      MEDIA_LOCAL_ENABLED: ${MEDIA_LOCAL_ENABLED:-false}
+      MEDIA_LOCAL_ROOT: ${MEDIA_LOCAL_ROOT:-/srv/media}
+      MEDIA_LOCAL_PUBLIC_PATH: ${MEDIA_LOCAL_PUBLIC_PATH:-/media}
+
       # --- Runtime ---
       PORT: "8080"
       MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-10MB}
       LOG_FORMAT: ${LOG_FORMAT:-ecs}
       SPRING_FLYWAY_ENABLED: "false"
+    volumes:
+      # rw: el backend escribe aqui. Caddy lo monta en ro y lo sirve.
+      - media:/srv/media
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     healthcheck:
@@ -199,6 +217,10 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+  # Media local. Lo escribe el backend (rw) y lo lee Caddy (ro). Necesario
+  # aunque hoy se use Cloudinary, para que activar MEDIA_LOCAL_ENABLED no exija
+  # tocar el compose.
+  media:
   # Cache de Vite/watcher del frontend-dev. En volumen para que reiniciar el
   # contenedor no obligue a recompilar el proyecto entero desde cero.
   frontend_dev_cache:
