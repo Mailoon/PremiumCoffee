@@ -185,11 +185,6 @@ services:
       MEDIA_LOCAL_ROOT: ${MEDIA_LOCAL_ROOT:-/srv/media}
       MEDIA_LOCAL_PUBLIC_PATH: ${MEDIA_LOCAL_PUBLIC_PATH:-/media}
 
-      # --- Media local ---
-      MEDIA_LOCAL_ENABLED: ${MEDIA_LOCAL_ENABLED:-false}
-      MEDIA_LOCAL_ROOT: ${MEDIA_LOCAL_ROOT:-/srv/media}
-      MEDIA_LOCAL_PUBLIC_PATH: ${MEDIA_LOCAL_PUBLIC_PATH:-/media}
-
       # --- Runtime ---
       PORT: "8080"
       MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-10MB}
