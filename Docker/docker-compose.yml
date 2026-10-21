@@ -1,23 +1,11 @@
-# ==========================================================================
-# PremiumCoffe — orquestacion local
-#
-#   docker compose up --build              -> levanta migrate + backend
-#   docker compose up --build -d           -> en segundo plano
-#   docker compose logs -f backend         -> ver el arranque
-#   docker compose config                  -> ver el .env ya interpretado
-#
-# Si algo falla con "variable is not set", el .env esta mal o le falta algo.
-# Ver la nota sobre .env al final de este archivo.
-# ==========================================================================
-
 name: premiumcoffe
-
 services:
   frontend:
     build:
       context: ..
       dockerfile: Docker/frontend.Dockerfile
-    image: premiumcoffe/frontend:local
+      target: app
+    image: premiumcoffe/frontend:pro
     container_name: premiumcoffe-frontend
     depends_on:
       migrate:
@@ -27,79 +15,89 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3000"
+      NUXT_API_BASE: ${API_INTERNAL_URL:-http://backend:8080}
       NUXT_PUBLIC_SITE_URL: ${SITE_PUBLIC_URL:-http://localhost:3000}
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ..
+      dockerfile: Docker/backend.Dockerfile
+    image: premiumcoffe/backend:pro
+    container_name: premiumcoffe-backend
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      DB_URL: ${DB_URL:?DB_URL no esta definido. Copia Docker/.env.example a Docker/.env y rellenalo}
+      DB_USER: ${DB_USER:?DB_USER no esta definido en Docker/.env}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD no esta definido en Docker/.env}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
+
+      CLOUDINARY_ENABLED: ${CLOUDINARY_ENABLED:-false}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+      CLOUDINARY_FOLDER: ${CLOUDINARY_FOLDER:-premiumcoffee}
+      MEDIA_LOCAL_ENABLED: ${MEDIA_LOCAL_ENABLED:-false}
+      MEDIA_LOCAL_ROOT: ${MEDIA_LOCAL_ROOT:-/srv/media}
+      MEDIA_LOCAL_PUBLIC_PATH: ${MEDIA_LOCAL_PUBLIC_PATH:-/media}
+      PORT: "8080"
+      MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-10MB}
+      LOG_FORMAT: ${LOG_FORMAT:-ecs}
+      SPRING_FLYWAY_ENABLED: "false"
+    volumes:
+      - media:/srv/media
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 12
-      start_period: 40s
-    stop_grace_period: 20s
+      start_period: 60s
+    stop_grace_period: 40s
     restart: unless-stopped
-
-  # ------------------------------------------------------------------------
-  # frontend-dev — Nuxt con recarga en caliente (HMR)
-  #
-  # Solo con el perfil "dev":
-  #     docker compose --profile dev up -d frontend-dev
-  #
-  # Que resuelve: editas un .vue y ves el cambio en el navegador SIN
-  # reconstruir la imagen. El codigo va montado por volumen, asi que el
-  # contenedor ve tus cambios al instante.
-  #
-  # OJO: "nuxt dev" recompila el proyecto en memoria, asi que el primer
-  # arranque tarda bastante mas que el build de produccion. Es normal.
-  # ------------------------------------------------------------------------
-  frontend-dev:
-    build:
-      context: ..
-      dockerfile: Docker/frontend.Dockerfile
-      target: dev
-    image: premiumcoffe/frontend-dev:local
-    container_name: premiumcoffe-frontend-dev
-    profiles: ["dev"]
-    depends_on:
-      backend:
-        condition: service_healthy
-    environment:
-      NODE_ENV: development
-      # "0.0.0.0" es obligatorio: si escucha en localhost DENTRO del
-      # contenedor, el puerto publicado desde el host no llega nunca.
-      NITRO_HOST: "0.0.0.0"
-      NITRO_PORT: "3000"
-      NUXT_API_BASE: ${API_INTERNAL_URL:-http://backend:8080}
-      NUXT_PUBLIC_SITE_URL: http://localhost:${FRONTEND_DEV_PORT:-3001}
-      # El watcher de Vite no recibe eventos de un bind mount en Docker
-      # Desktop (Windows/macOS). Sin esto habria que guardar cada archivo
-      # dos veces para que se notara el cambio.
-      CHOKIDAR_USEPOLLING: "true"
-      WATCHPACK_POLLING: "true"
-      NUXT_TELEMETRY_DISABLED: "1"
-    volumes:
-      # Solo el codigo. node_modules NO se monta a proposito: las imagenes
-      # de node son de Linux y las de tu host son de Windows, y mezclarlas
-      # rompe los binarios nativos (esbuild, rollup, oxc...).
-      - ../Frontend/app:/app/app
-      - ../Frontend/server:/app/server
-      - ../Frontend/nuxt.config.ts:/app/nuxt.config.ts
-      - ../Frontend/package.json:/app/package.json
-      # Cache del watcher y de Vite en volumen, para no perderla al reiniciar
-      - frontend_dev_cache:/app/.nuxt
-    ports:
-      - "${FRONTEND_DEV_PORT:-3001}:3000"
-    restart: unless-stopped
-
-  # ------------------------------------------------------------------------
-  # caddy — reverse proxy con TLS. Solo con el perfil "tls":
-  #     docker compose --profile tls up
-  #
-  # Existe para ENSAYAR en local lo que pasa en produccion: un solo origen
-  # y HTTPS. Por eso NO viene en el `up` normal, que debe ser rapido.
-  # En produccion se cambia "localhost" por el dominio real y Caddy pide el
-  # certificado a Let's Encrypt solo, sin cron ni certbot.
-  # ------------------------------------------------------------------------
   caddy:
     image: caddy:2-alpine
     container_name: premiumcoffe-caddy
@@ -107,31 +105,23 @@ services:
     depends_on:
       frontend:
         condition: service_healthy
+      backend:
+        condition: service_healthy
     ports:
       - "${CADDY_HTTPS_PORT:-8443}:443"
       - "${CADDY_HTTP_PORT:-8081}:80"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      # Mismo volumen que usa el backend para escribir. Caddy lo lee y lo sirve
-      # con file_server; Kotlin nunca vuelve a tocar estos bytes.
       - media:/srv/media:ro
       - caddy_data:/data
       - caddy_config:/config
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
 
-  # ------------------------------------------------------------------------
-  # migrate — tarea de un solo uso. Aplica las migraciones y se apaga.
-  #
-  # Por que NO deixar que Flyway corra dentro del backend:
-  # con un contenedor no se nota, pero al escalar a varias replicas todas
-  # arrancan a la vez, todas ven el esquema desactualizado y todas intentan
-  # migrar. Solo una gana el lock y las demas revientan el deploy.
-  #
-  # Este patron es el mismo en la nube:
-  #   AWS   -> ECS Task / Step Functions
-  #   Azure -> Container Apps Job
-  #   GCP   -> Cloud Run Job
-  # ------------------------------------------------------------------------
   migrate:
     image: flyway/flyway:11
     container_name: premiumcoffe-migrate
@@ -144,84 +134,26 @@ services:
       FLYWAY_USER: ${DB_USER:?DB_USER no esta definido en Docker/.env}
       FLYWAY_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD no esta definido en Docker/.env}
       FLYWAY_LOCATIONS: filesystem:/flyway/sql
-      # Reintenta 30 veces: la red o el pooler pueden tardar en responder
       FLYWAY_CONNECT_RETRIES: "30"
-      # Las migraciones ya aplicadas no se tocan jamas (regla de Flyway)
       FLYWAY_VALIDATE_ON_MIGRATE: "true"
 
-  # ------------------------------------------------------------------------
-  # backend — API Spring Boot
-  # ------------------------------------------------------------------------
-  backend:
-    build:
-      context: ..
-      dockerfile: Docker/backend.Dockerfile
-    image: premiumcoffe/backend:local
-    container_name: premiumcoffe-backend
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-    env_file:
-      - path: .env
-        required: true
-    environment:
-      # --- Base de datos (Supabase pooler) ---
-      DB_URL: ${DB_URL:?DB_URL no esta definido en Docker/.env}
-      DB_USER: ${DB_USER:?DB_USER no esta definido en Docker/.env}
-      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD no esta definido en Docker/.env}
-      DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
-
-      # --- Cloudinary ---
-      CLOUDINARY_ENABLED: ${CLOUDINARY_ENABLED:-false}
-      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
-      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
-      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
-      CLOUDINARY_FOLDER: ${CLOUDINARY_FOLDER:-premiumcoffee}
-
-      # --- Media local ---
-      # Escribe en el volumen `media`, que Caddy lee en modo solo. Con esto la
-      # JVM nunca sirve un archivo: solo lo guarda y anota la fila.
-      MEDIA_LOCAL_ENABLED: ${MEDIA_LOCAL_ENABLED:-false}
-      MEDIA_LOCAL_ROOT: ${MEDIA_LOCAL_ROOT:-/srv/media}
-      MEDIA_LOCAL_PUBLIC_PATH: ${MEDIA_LOCAL_PUBLIC_PATH:-/media}
-
-      # --- Runtime ---
-      PORT: "8080"
-      MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-10MB}
-      LOG_FORMAT: ${LOG_FORMAT:-ecs}
-      SPRING_FLYWAY_ENABLED: "false"
-    volumes:
-      # rw: el backend escribe aqui. Caddy lo monta en ro y lo sirve.
-      - media:/srv/media
-    ports:
-      - "${BACKEND_PORT:-8080}:8080"
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 60s
-    stop_grace_period: 40s
-    restart: unless-stopped
-
-# ==========================================================================
-# Volumenes de Caddy (solo se usan con el perfil "tls")
-# Guardan el certificado TLS generado para que no se regenere en cada
-# `up`, que es lo que hace que el arranque con TLS sea lento la primera vez.
-# --------------------------------------------------------------------------
 volumes:
   caddy_data:
   caddy_config:
-  # Media local. Lo escribe el backend (rw) y lo lee Caddy (ro). Necesario
-  # aunque hoy se use Cloudinary, para que activar MEDIA_LOCAL_ENABLED no exija
-  # tocar el compose.
   media:
-  # Cache de Vite/watcher del frontend-dev. En volumen para que reiniciar el
-  # contenedor no obligue a recompilar el proyecto entero desde cero.
   frontend_dev_cache:
+
 # ==========================================================================
 # Primera vez (tarda, compila el proyecto en memoria)
-# docker compose --profile dev up -d frontend-dev
-
-# Ver la recarga en acción
-# docker compose logs -f frontend-dev
+# docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#
+# Ver la recarga en accion
+# docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f frontend
+# ==========================================================================
+# PremiumCoffe — orquestacion local
+#
+#   docker compose up -d                              DESARROLLO (puerto 3001)
+#   docker compose -f docker-compose.yml up -d        PRODUCCION  (puerto 3000)
+#   docker compose --profile tls up -d                DESARROLLO + Caddy (8443)
+#   docker compose -f docker-compose.yml --profile tls up -d   PRODUCCION + Caddy
+# ==========================================================================

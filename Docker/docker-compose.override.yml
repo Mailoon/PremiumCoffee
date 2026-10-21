@@ -1,0 +1,102 @@
+# ==========================================================================
+# Override de DESARROLLO.
+#
+# Este fichero NO es un compose completo. Es un PARCHE que se aplica encima
+# de docker-compose.yml y que solo toca el servicio "frontend".
+#
+# Que solo aparezca un servicio aqui es lo correcto, no un error: migrate,
+# backend y caddy ya estan definidos en el compose base y este fichero no los
+# toca. Por eso no los ves.
+#
+# --------------------------------------------------------------------------
+# LOS CUATRO COMANDOS
+# --------------------------------------------------------------------------
+#
+#   docker compose up -d
+#       -> DESARROLLO. Este fichero se auto-carga porque se llama
+#          docker-compose.override.yml. El frontend arranca con nuxt dev,
+#          con recarga en caliente, en el puerto 3001.
+#
+#   docker compose -f docker-compose.yml up -d
+#       -> PRODUCCION. Al pasar -f a mano, el override NO se carga. El
+#          frontend arranca con el build de la imagen, sin volumenes, en el
+#          puerto 3000.
+#
+#   docker compose --profile tls up -d
+#       -> DESARROLLO + Caddy delante, con TLS y origen unico.
+#
+#   docker compose -f docker-compose.yml --profile tls up -d
+#       -> PRODUCCION + Caddy delante. Es el ensayo del despliegue.
+#
+# El truco de Compose es ese: un fichero llamado docker-compose.override.yml
+# se carga SOLO si no le pasas -f a mano. En cuanto escribes -f, el compose
+# deja de buscarlo.
+#
+# --------------------------------------------------------------------------
+# QUE TOCA ESTE FICHERO Y QUE NO
+# --------------------------------------------------------------------------
+#
+# Toca: el modo (MODE), los volumenes, NITRO_*, el watcher, el limite de
+# memoria, el read_only y el usuario.
+#
+# NO toca: la imagen, el build, el healthcheck del backend ni los limites del
+# backend. Esos son los mismos en los dos modos, y es justo lo que se quiere:
+# que el desarrollo se parezca a la produccion.
+#
+# OJO con el cambio de usuario: en dev el contenedor corre como root, en prod
+# el entrypoint baja a "node". Es al reves de lo habitual, y a proposito: en
+# desarrollo los permisos de los volumenes del host molestan mucho mas de lo
+# que molesta el root, y en produccion el root no aporta nada.
+# ==========================================================================
+
+services:
+  frontend:
+    environment:
+      MODE: "dev"
+      NODE_ENV: development
+      NITRO_HOST: "0.0.0.0"
+      NITRO_PORT: "3000"
+      # El watcher de Vite no recibe eventos de un bind mount en Docker
+      # Desktop (Windows/macOS). Sin esto habria que guardar cada archivo
+      # dos veces para que se notara el cambio.
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - ../Frontend/app:/app/app
+      - ../Frontend/server:/app/server
+      - ../Frontend/nuxt.config.ts:/app/nuxt.config.ts
+      - ../Frontend/package.json:/app/package.json
+      # Modulos LOCALES de Nuxt. nuxt.config.ts declara
+      # "./modules/vue-compiler-plugins-cleanup" y Nuxt lo resuelve contra
+      # la raiz del proyecto, o sea /app/modules/....
+      - ../Frontend/modules:/app/modules
+      # Cache del watcher y de Vite en volumen, para no perderla al reiniciar.
+      - frontend_dev_cache:/app/.nuxt
+    ports:
+      - "${FRONTEND_DEV_PORT:-3001}:3000"
+    # En desarrollo no hay limite de memoria: el servidor de desarrollo con
+    # su watcher se come mas que el de produccion, y un limite aqui solo
+    # provocaria que Vite muera con un error de memoria a media sesion.
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    # En desarrollo el filesystem NO es de solo lectura: el watcher de Vite
+    # escribe en .nuxt. En produccion si lo es.
+    read_only: false
+    # En desarrollo el contenedor corre como root, porque el entrypoint solo
+    # baja a "node" en modo produccion. Hace falta para poder escribir en
+    # los volumenes que vienen del host.
+    user: root
+    # El arranque del dev es mas lento que el de produccion (compila en
+    # memoria), asi que el margen de gracias es mayor.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s

@@ -43,6 +43,27 @@
 **/.mvn/
 **/.idea/
 
+# --- Artefactos de Nuxt ---------------------------------------------------
+# These three are NOT optional.
+#
+# .nuxt is the route manifest and the compile cache that Nuxt writes while
+# you develop. If it sneaks into the build context, the "COPY Frontend/ ./"
+# puts the local .nuxt into the image, and "nuxt build" REUSES it instead of
+# regenerating it.
+#
+# The result is an image with the routes from the last time you ran the
+# dev server locally. If you add a new endpoint and you have not started the
+# dev server, the endpoint does not exist in the image. And if you did
+# start it, the image comes out right, but by accident.
+#
+# It is the worst kind of build bug: it does not fail, it fails when it
+# feels like it. With these three lines, the image depends only on the
+# code in the repository.
+**/.nuxt/
+**/.output/
+**/.nitro/
+**/.data/
+
 # --- Documentacion y entorno de desarrollo -------------------------------
 Docker/ARCHITECTURE.md
 Docker/Caddyfile

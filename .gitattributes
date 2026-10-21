@@ -1,0 +1,41 @@
+# ==========================================================================
+# Control de finales de linea.
+#
+# En Windows, Git convierte LF a CRLF al hacer checkout (core.autocrlf=true).
+# Para casi todos los ficheros da igual. Para los scripts de shell, NO.
+#
+# Un script con CRLF tiene el shebang asi:
+#     #!/bin/sh\r
+# El kernel no encuentra "/bin/sh\r" y el contenedor muere con:
+#     exec /usr/local/bin/frontend-entrypoint.sh: no such file or directory
+#
+# Un error asi es especialmente dificil de diagnosticar: el mensaje apunta al
+# script, pero el problema es un byte invisible al final de la primera linea.
+#
+# Con "* text=auto" y las reglas de abajo, el repositorio guarda siempre LF y
+# el checkout en Windows lo convierte a CRLF solo donde no importa.
+# ==========================================================================
+
+# Normalizacion general: Git detecta el tipo de cada fichero y guarda LF.
+* text=auto
+
+# ---- LF OBLIGATORIO ------------------------------------------------------
+# Todo lo que ejecuta un interprete de Linux dentro del contenedor, o que lee
+# un tooling de Linux.
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.Dockerfile text eol=lf
+docker-compose*.yml text eol=lf
+Caddyfile text eol=lf
+
+# ---- Binarios -------------------------------------------------------------
+# Sin esto, Git intenta adivinar si un .png es texto y a veces lo corrompe.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.glb binary
+*.woff binary
+*.woff2 binary

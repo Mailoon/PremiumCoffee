@@ -1,115 +1,35 @@
-﻿# ==========================================================================
-# Caddy como reverse proxy — UN SOLO ORIGEN con TLS
-#
-# Esto es una CAPA DE PRODUCCION. En local, el navegador puede hablar
-# directamente con Nuxt (http://localhost:3000) y con el backend
-# (http://localhost:8080) sin ningun proxy de por medio.
-#
-# Entonces, ¿para qué sirve esto? Para REPETIR en local lo que va a pasar en
-# produccion. Entrar por un unico puerto con TLS hace que los problemas de
-# CORS, de mixed content y de rutas aparezcan aqui y no el dia del deploy.
-#
-# Caddy se activa solo con el perfil "tls":
-#
-#   docker compose up                    -> sin Caddy (dev rapido)
-#   docker compose --profile tls up      -> con Caddy (ensayo de produccion)
-#
-# ==========================================================================
-
-{
+﻿{
 	# Puerto 80 solo responde para redirigir a HTTPS.
 	# El certificado lo emite y renueva Caddy solo, sin cron ni certbot.
 }
 
 localhost {
-	# "internal" = Caddy se emite a si mismo un certificado local.
-	# El navegador avisara de que no es una CA de confianza, y eso es lo
-	# esperado: aqui probamos el cifrado, no la cadena de confianza real.
-	#
-	# En produccion esto se sustituye por el dominio real y Caddy pide el
-	# certificado a Let's Encrypt automaticamente:
-	#
-	#   api.tudominio.com {
-	#       ...
-	#   }
 	tls internal
 
-	# Sin esto, Caddy se quejaria de que todos los virtual hosts son HTTP.
 	encode zstd gzip
 
-	# Cabeceras de seguridad.
-	#
-	# Aqui SOLO queda -Server. Las demas (CSP, HSTS, X-Frame-Options,
-	# Referrer-Policy, X-Content-Type-Options...) las emite el modulo
-	# nuxt-security desde Nitro, en Frontend/nuxt.config.ts. No se duplican a
-	# proposito: dos capas emitiendo la misma cabecera obligan a mantenerlas
-	# sincronizadas, y en el caso del CSP ese duplicado rompe la pagina.
-	#
-	# El CSP NO puede vivir aqui por una razon tecnica: usa un nonce distinto
-	# en cada peticion, y solo la capa que RENDERIZA el HTML puede generar ese
-	# nonce e inyectarlo en sus <script>. Un proxy que solo reenvia cabeceras no
-	# ve el HTML, asi que el nonce que pone nunca coincide con el del documento
-	# y el navegador bloquea todos los scripts.
-	#
-	# -Server si se queda aqui porque Caddy lo añade en las respuestas de error
-	# propias (por ejemplo el 502 cuando Nuxt no arranca), que no pasan por
-	# Nitro y por tanto no llevan las cabeceras de este.
 	header {
 		-Server
 	}
-
-	# ---- API y frontend salen por el MISMO origen -------------------------
-	#
-	# Por esto NO hay CORS: para el navegador, /api y / son la misma pagina.
-	# Si el frontend llamara directamente a http://backend:8080, cada
-	# respuesta del backend necesitaria cabeceras CORS y habria que
-	# mantenerlas sincronizadas con los dominios de cada entorno.
 
 	handle /api/* {
 		reverse_proxy frontend:3000
 	}
 
-	# ---- Media local servida desde disco, SIN pasar por Kotlin -------------
-	#
-	# Esto es lo que hace que la JVM no toque nunca los bytes de una imagen ni de
-	# un .glb. Spring solo escribe el archivo y guarda la fila; Caddy lo sirve
-	# leyendo el directorio. Un modelo de 30 MB en el heap de la JVM seria leerlo
-	# entero para copiarlo, que es lento y una forma sencilla de que la maten.
-	#
-	# root: el MISMO MEDIA_LOCAL_ROOT que recibe el backend. Deben apuntar al
-	# mismo volumen.
-	#
-	# Cache-Control: immutable. El nombre del archivo es el SHA-256 del
-	# contenido, asi que dos archivos con el mismo nombre son el mismo archivo,
-	# byte a byte. Si el contenido cambia, el nombre cambia, y por tanto cambia
-	# la URL. Eso convierte "no volver a descargar lo que ya tengo" en una
-# garantia, no en una suposicion. Y es seguro usar un max-age de un ano porque
-	# existe ninguna URL cuyo contenido cambie nunca.
-	#
-	# OJO: por esto el backend NUNCA debe sobrescribir un archivo ya existente en
-	# esa ruta. Si lo hiciera, un cliente que ya lo tiene cacheado 365 dias
-	# estaria viendo el contenido viejo para siempre.
-	#
-	# file_server va con encode para que las imagenes que si sean comprimibles
-	# (.svg, .json) travelen por gzip.
 	handle /media/* {
 		root * /srv/media
 		header {
 			Cache-Control "public, max-age=31536000, immutable"
 			X-Content-Type-Options nosniff
 		}
-		file_server {
-			encode zstd gzip
-		}
+		encode zstd gzip
+		file_server
 	}
 
 	handle {
 		reverse_proxy frontend:3000
 	}
 
-	# Logs estructurados: un objeto JSON por peticion, igual que el
-	# LOG_FORMAT=ecs del backend. Asi CloudWatch / Log Analytics los
-	# indexan con los mismos campos.
 	log {
 		output stdout
 		format json

@@ -1,74 +1,36 @@
-# syntax=docker/dockerfile:1
-
-# ==========================================================================
-# PremiumCoffe — imagen del frontend (Nuxt 4 / Vue 3)
-#
-# Contexto de build: la raiz del repo.
-# ==========================================================================
-
-# --------------------------------------------------------------------------
-# Stage 1 — deps
-#
-# Se copia SOLO package.json primero. Si esto no cambia (casi nunca), Docker
-# reutiliza la capa y no vuelve a descargar ~300 MB de node_modules.
-# El package-lock.json se copia tambien para installs reproducibles: sin el,
-# dos builds en dias distintos pueden instalar versiones distintas.
-# --------------------------------------------------------------------------
-FROM node:22-alpine AS deps
+FROM node:22-alpine@sha256:2c752226d477b4a886378baa95b9af252be59301b725fdb0b7e15208131505a8 AS deps
 WORKDIR /app
 
 COPY Frontend/package.json Frontend/package-lock.json* ./
 RUN npm ci --no-audit --no-fund
 
-# --------------------------------------------------------------------------
-# Stage 2 — build
-# --------------------------------------------------------------------------
-FROM node:22-alpine AS build
+FROM node:22-alpine@sha256:2c752226d477b4a886378baa95b9af252be59301b725fdb0b7e15208131505a8 AS build
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY Frontend/ ./
 
-# NUXT_TELEMETRY_DISABLED evita que el build intente phone home.
 ENV NUXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-# --------------------------------------------------------------------------
-# Stage 3 (opcional) — dev
-#
-# Solo se construye con:  docker compose --profile dev build frontend-dev
-# Lleva node_modules completo y arranca "nuxt dev", que recarga en caliente.
-# El servicio dev de docker-compose.yml monta el codigo por volumen, asi que
-# este stage NO copia el codigo: solo deja las dependencias listas.
-# --------------------------------------------------------------------------
-FROM node:22-alpine AS dev
-WORKDIR /app
-
-COPY --from=deps /app/node_modules ./node_modules
-COPY Frontend/package.json ./package.json
-COPY Frontend/nuxt.config.ts ./nuxt.config.ts
-
-ENV NUXT_TELEMETRY_DISABLED=1
-CMD ["npm", "run", "dev"]
-
-# --------------------------------------------------------------------------
-# Stage 4 — runtime
-#
-# NO se copia node_modules entero: en producción Nuxt solo necesita los que
-# estan en .output/server/node_modules, que ya son solo los de runtime.
-# --------------------------------------------------------------------------
-FROM node:22-alpine AS runtime
+FROM node:22-alpine@sha256:2c752226d477b4a886378baa95b9af252be59301b725fdb0b7e15208131505a8 AS app
 WORKDIR /app
 
 ENV NODE_ENV=production \
     NUXT_TELEMETRY_DISABLED=1 \
-    HOST=0.0.0.0 \
-    PORT=3000
+    HOST=0.0.0.0
+RUN apk add --no-cache su-exec
 
+COPY --from=deps --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/.output ./.output
+COPY --chown=node:node Frontend/ ./
 
-USER node
+COPY --chmod=755 Docker/frontend-entrypoint.sh /usr/local/bin/frontend-entrypoint.sh
 
 EXPOSE 3000
 
-CMD ["node", ".output/server/index.mjs"]
+HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \
+  CMD wget -qO- "http://127.0.0.1:${PORT:-3000}/api/health" > /dev/null 2>&1 || exit 1
+STOPSIGNAL SIGTERM
+
+ENTRYPOINT ["/usr/local/bin/frontend-entrypoint.sh"]

@@ -33,10 +33,19 @@ docker compose up --build
 | Comando | Para qué |
 |---|---|
 | `docker compose up --build` | levanta `migrate` y luego `backend` |
+| `docker compose --profile dev up -d frontend-dev` | añade el frontend con recarga en caliente |
+| `docker compose --profile prod up -d` | **ensayo de producción**: frontend de runtime + Caddy como origen único con TLS |
 | `docker compose logs -f backend` | sigue el arranque |
 | `docker compose config --quiet` | **valida** el `.env` **sin imprimir secretos** |
 | `docker compose down` | para todo |
 | `docker compose build --no-cache backend` | rebuild limpio |
+
+> ### 📄 Para desplegar: `DEPLOY.md`
+>
+> Este documento explica cómo se levanta en local. Cómo se monta **gratis** en
+> la nube —qué límites tiene cada tier gratuito, dónde va cada pieza, cómo se
+> simulan esos límites en local y qué trampas hay con la CSP, el egress y el
+> cold start— está en **[`DEPLOY.md`](DEPLOY.md)**.
 
 El orden lo garantiza `depends_on` con `condition: service_completed_successfully`:
 `backend` no arranca hasta que `migrate` termina **con éxito**.
