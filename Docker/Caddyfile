@@ -1,4 +1,4 @@
-﻿{
+{
 	# Puerto 80 solo responde para redirigir a HTTPS.
 	# El certificado lo emite y renueva Caddy solo, sin cron ni certbot.
 }
@@ -13,7 +13,20 @@ localhost {
 	}
 
 	handle /api/* {
-		reverse_proxy frontend:3000
+		# F4.35 - El rate limiter de Nitro cuenta por IP, y la IP la lee de
+		# X-Forwarded-For. Por defecto Caddy ANADE la IP real a la cabecera
+		# que le llegue: si el cliente ya mando su propio X-Forwarded-For,
+		# la cadena quedaria "IP-FALSA, IP-REAL" y el limitador leeria la
+		# primera, la falsa.
+		#
+		# Eso seria un bypass trivial del limite de intentos de login: cada
+		# peticion con una cabecera distinta pasaria el filtro.
+		#
+		# header_up REESCRIBE la cabecera con la IP real del cliente, de modo
+		# que lo que Nitro lee es siempre fiable.
+		reverse_proxy frontend:3000 {
+			header_up X-Forwarded-For {remote_host}
+		}
 	}
 
 	handle /media/* {

@@ -17,6 +17,8 @@ services:
       PORT: "3000"
       NUXT_API_BASE: ${API_INTERNAL_URL:-http://backend:8080}
       NUXT_PUBLIC_SITE_URL: ${SITE_PUBLIC_URL:-http://localhost:3000}
+      NUXT_CSRF_COOKIE_SECURE: ${CSRF_COOKIE_SECURE:-false}
+      NUXT_CSRF_COOKIE_KEY: ${CSRF_COOKIE_KEY:-csrf}
     deploy:
       resources:
         limits:
@@ -72,6 +74,8 @@ services:
       MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-10MB}
       LOG_FORMAT: ${LOG_FORMAT:-ecs}
       SPRING_FLYWAY_ENABLED: "false"
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
     volumes:
       - media:/srv/media
     deploy:
@@ -88,8 +92,8 @@ services:
       - /tmp:size=64m
     security_opt:
       - no-new-privileges:true
-    ports:
-      - "${BACKEND_PORT:-8080}:8080"
+    expose:
+      - "8080"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
       interval: 10s
@@ -136,6 +140,7 @@ services:
       FLYWAY_LOCATIONS: filesystem:/flyway/sql
       FLYWAY_CONNECT_RETRIES: "30"
       FLYWAY_VALIDATE_ON_MIGRATE: "true"
+      FLYWAY_OUT_OF_ORDER: "false"
 
 volumes:
   caddy_data:
