@@ -12,11 +12,16 @@ abstract class AbstractReadService<T : Any, ID : Any>(
 
     protected abstract val resourceName: String
 
+    // `open` no es decorativo: Spring proxya los beans con CGLIB, y CGLIB no
+    // puede reescribir un metodo final. El plugin `kotlin("plugin.spring")`
+    // abre las clases anotadas con @Service y sus miembros, pero NO abre los
+    // metodos heredados de una clase base sin anotacion: aqui seguian siendo
+    // final y el @Transactional no se aplicaba nunca.
     @Transactional(readOnly = true)
-    override fun findAll(query: PageQuery): PageResult<T> = repository.findAll(query)
+    open override fun findAll(query: PageQuery): PageResult<T> = repository.findAll(query)
 
     @Transactional(readOnly = true)
-    override fun findById(id: ID): T =
+    open override fun findById(id: ID): T =
         repository.findById(id).orElseThrow {
             ResourceNotFoundException(resourceName, id)
         }

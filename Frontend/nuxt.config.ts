@@ -2,25 +2,6 @@
 
 const isProd = process.env.NODE_ENV === 'production'
 
-// ==========================================================================
-// Content-Security-Policy
-// ==========================================================================
-// Se emite desde aqui, y NO desde Caddy, por una razon concreta: la politica
-// usa un nonce distinto en cada peticion. Solo la capa que RENDERIZA el HTML
-// puede generar ese nonce e inyectarlo en sus <script>. Si la cabecera la
-// pone un proxy que no ve el HTML, el nonce de la cabecera nunca coincide con
-// el del HTML y el navegador bloquea todo.
-//
-// Un dato que hace esto mucho mas barato de lo que parece: Nuxt 4 NO emite el
-// payload como JavaScript ejecutable, sino como
-// <script type="application/json" id="__NUXT_DATA__">. Ese tag NO lo ejecuta
-// el navegador, asi que CSP no lo toca. Y el <script type="importmap"> tampoco
-// es JavaScript. En el HTML de este proyecto solo hay UN script inline
-// ejecutable: el que inyecta runtimeConfig. El nonce lo resuelve.
-//
-// Lo que SI queda bloqueado sin nonce es un XSS inyectado en cualquier punto:
-// no puede ni crear un <script> ni un onclick=.
-// ==========================================================================
 const contentSecurityPolicy = {
   'base-uri': ["'none'"],
   'object-src': ["'none'"],
@@ -32,8 +13,6 @@ const contentSecurityPolicy = {
   'img-src': ["'self'", 'data:', 'blob:', 'https://res.cloudinary.com'],
   'media-src': ["'self'", 'blob:', 'https://res.cloudinary.com'],
   'font-src': ["'self'", 'data:'],
-  // worker-src 'blob:' es la previsibilidad para Three.js: los loaders de Draco y KTX2
-  // corren en Web Workers, y estos se crean con blob: URL.
   'worker-src': ["'self'", 'blob:'],
  
   'manifest-src': ["'self'"],
@@ -41,8 +20,6 @@ const contentSecurityPolicy = {
     ? ["'self'", 'https://res.cloudinary.com']
     : ["'self'", 'https://res.cloudinary.com', 'ws:', 'wss:'],
 
-  // ---- Solo en produccion ------------------------------------------------
-  // obliga a que cualquier recurso se pida por https
   'upgrade-insecure-requests': isProd
 }
 
@@ -76,8 +53,56 @@ export default defineNuxtConfig({
     compressPublicAssets: true
   },
 
-  // El orden importa: este modulo se instala despues del nucleo de Nuxt, que
-  // es lo que mete el plugin de Volar roto en los tsconfigs. Va el ultimo.
+  routeRules: {
+    '/api/**': {
+      security: {
+        xssValidator: false
+      }
+    },
+
+    '/api/auth/login': {
+      security: {
+        rateLimiter: {
+          tokensPerInterval: 5,
+          interval: 60,
+          headers: true
+        }
+      }
+    },
+    '/api/auth/register': {
+      security: {
+        rateLimiter: { tokensPerInterval: 5, interval: 60, headers: true }
+      }
+    },
+    '/api/auth/forgot-password': {
+      security: {
+        rateLimiter: { tokensPerInterval: 5, interval: 60, headers: true }
+      }
+    },
+    '/api/auth/reset-password': {
+      security: {
+        rateLimiter: { tokensPerInterval: 5, interval: 60, headers: true }
+      }
+    },
+    '/api/auth/**': {
+      security: {
+        requestSizeLimiter: {
+          maxRequestSizeInBytes: 16384,
+          maxUploadFileRequestInBytes: 16384
+        }
+      }
+    },
+
+    '/api/media-assets/upload': {
+      security: {
+        requestSizeLimiter: {
+          maxRequestSizeInBytes: 12 * 1024 * 1024,
+          maxUploadFileRequestInBytes: 12 * 1024 * 1024
+        }
+      }
+    }
+  },
+
   modules: ['nuxt-security', './modules/vue-compiler-plugins-cleanup'],
   vite: {
     plugins: [tailwindcss()]
@@ -86,29 +111,26 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
 
   security: {
-    // Genera un nonce por peticion. Necesario para que el HTML y la cabecera
-    // CSP coincidan.
     nonce: true,
     sri: false,
+    rateLimiter: false,
+    requestSizeLimiter: false,
+    corsHandler: false,
+    csrf: {
+      cookieKey: 'csrf',
+
+      cookie: {
+        path: '/',
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: false
+      },
+      headerName: 'csrf-token',
+      methodsToProtect: ['POST', 'PUT', 'PATCH', 'DELETE']
+    },
 
     headers: {
       contentSecurityPolicy,
-
-      // ---- HSTS ----------------------------------------------------------
-      // Dice al navegador: durante max-age segundos, esta URL solo se
-      // acepta por https y nunca se baja a http. Sin esto, un atacante que
-      // controle la red local (wifi de un cafe) solo tiene que esperar al
-      // primer click sin https.
-      //
-      // En DESARROLLO va desactivado a proposito. Caddy usa `tls internal`,
-      // un certificado autofirmado: si el navegador guardase un HSTS de un ano
-      // sobre localhost, seguiria exigiendo https al sitio LOCAL mucho tiempo
-      // despues de arreglar el certificado, sin forma de quitarlo desde el
-      // codigo. Solo el cache del navegador lo limpia.
-      //
-      // includeSubdomains va en false: si mas adelante se sirve
-      // api.tudominio.com, un HSTS con includeSubdomains aqui dejaria ese
-      // subdominio con https sin haber emitido su certificado.
       strictTransportSecurity: isProd
         ? { maxAge: 31_552_000, includeSubdomains: false, preload: false }
         : false,
@@ -126,19 +148,6 @@ export default defineNuxtConfig({
         types: ['node']
       }
     },
-
-    // Nuxt mete "vue-router/volar/sfc-route-blocks" en los vueCompilerOptions
-    // de .nuxt/tsconfig.app.json. Ese plugin sirve para los bloques <route> de
-    // vue-router, y vue-router 4.6.4 ya no lo exporta en su package.json.
-    // Volar intenta resolverlo, falla y se come el error con un try/catch: el
-    // typecheck sigue bien, pero en cada ejecucion y en el IDE sale esto, que
-    // parece un fallo del proyecto cuando no lo es:
-    //
-    //   [Vue] Resolve plugin path failed: vue-router/volar/sfc-route-blocks
-    //   Error [ERR_PACKAGE_PATH_NOT_EXPORTED]
-    //
-    // Vaciar la lista lo hace desaparecer. Es seguro: Nuxt declara las rutas
-    // con definePageMeta({ path: '...' }), nunca con bloques <route>.
     tsConfig: {
       vueCompilerOptions: {
         plugins: []
