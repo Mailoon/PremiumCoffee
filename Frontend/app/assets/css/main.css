@@ -1,0 +1,442 @@
+/* ==========================================================================
+   Premium Coffee — hoja de estilos base
+   Tailwind CSS v4
+   ==========================================================================
+
+   Este archivo es el unico punto donde vive el diseno. Fuera de aqui no hay
+   ni un color, ni una medida, ni un nombre de fuente escrito a mano: todo lo
+   que se usa en un .vue sale de los tokens que se declaran debajo.
+
+   --------------------------------------------------------------------------
+   COMO ESTA ORGANIZADO, Y POR QUE
+   --------------------------------------------------------------------------
+
+   Son tres capas, y separarlas es lo que hace que el tema se pueda cambiar
+   entero sin tocar ni un componente:
+
+   1. PALETA CRUDA      -> @theme con los literales de las dos imagenes.
+                           Genera utilidades literales (bg-cream, text-tan).
+                           Son los colores TAL COMO SON, sin significado.
+
+   2. TOKENS SEMANTICOS -> :root y .dark.
+                           Aqui es donde un color DECIDE que papel juega
+                          (fondo, texto, borde...). Son las variables que
+                          cambian con el modo.
+
+   3. PUENTE             -> @theme inline.
+                           Conecta la capa 1 con la 2: publica cada token
+                          semantico como utilidad de Tailwind (bg-surface,
+                          text-muted...). Gracias a `inline`, la utilidad
+                          emitida es literalmente `var(--surface)`, no el
+                          color congelado. Por eso sigue funcionando cuando
+                           .dark reescribe el token y no hay que redefinir
+                          utilidades a mano.
+
+   --------------------------------------------------------------------------
+   REGLA DE LA PALETA: NO SE INVENTA NINGUN TONO
+   --------------------------------------------------------------------------
+
+   El tema se construye con los DOCE colores de las dos imagenes mas blanco.
+   Ni uno mas. Se token `--color-roast` existio en una version anterior de
+   este archivo (#4a2d05, un cafe mas oscuro que permitia que el texto apagado
+   no fallara sobre las tarjetas) y se elimino: era un tono que la marca no
+   habia elegido. La solucion esta al final del bloque de tokens semanticos.
+
+   --------------------------------------------------------------------------
+   DECISION QUE SE TOMO ANTES DE ESCRIBIR NADA: QUE PALETA VA CON QUE MODO
+   --------------------------------------------------------------------------
+
+   La idea inicial era "una paleta para oscuro y otra para claro". Se midio y
+   NO es lo que funciona. El resultado real es este:
+
+   - La paleta de la IMAGEN 2 es la ESTRUCTURA. Sirve para los DOS modos.
+     Es la unica que tiene un rango de luminancia completo (de #603c07 a
+     #efefef) y por tanto la unica que puede construir fondo, texto y borde
+    a la vez.
+
+   - La paleta de la IMAGEN 1 aporta los TONOS DE ACENTO. Los cinco claros
+    (cream, arena, rosa, azul, salvia) son los unicos colores que pueden
+    llevar texto encima con `#603c07` y pasar el contraste:
+         azul 7.19 · rosa 7.08 · arena 6.75 · crema 6.70 · salvia 5.25
+        camel 3.43 · marron 1.69   <-- NUNCA con texto encima
+
+     Y hay una regla de ESCALA, no solo de color: los pasteles valen en
+    detalles pequenos (chips, insignias, el punto de un estado), no en
+    superficies grandes. Puesto al 100% de una tarjeta, un pastel deja de
+    leerse como cafe y arrastra la marca hacia un registro infantil.
+
+   Contraste medido (WCAG 2.1) de la paleta 1 colocada como si fuera un modo
+   completo:
+    texto #7e6136 sobre fondo #ead3b5    ->  3.97  solo AA para texto grande
+    texto #ead3b5 sobre superficie #b5936f -> 1.97  FALLA
+    apagado #b5936f sobre #b5936f        ->  1.00  FALLA (mismo color)
+
+   Ese ultimo par es la razon de fondo: #7e6136 y #835f2a tienen luminancia
+   casi identica (0.1325 y 0.1318). Son el mismo tono. Poner uno como texto
+   apagado y el otro como superficie garantiza fallar, en cualquier orden y
+   en cualquier modo.
+
+   ========================================================================== */
+
+@import "tailwindcss";
+
+/* --------------------------------------------------------------------------
+   Modo oscuro por clase, no por preferencia del sistema.
+
+   Se elige clase y no `prefers-color-scheme` por una razon concreta: el
+   proyecto va a tener un selector de tema. Con la preferencia del sistema no
+   hay forma de que un usuario elija claro en un movil con tema oscuro del
+   sistema, que es justo uno de los casos normales.
+
+   Este bloque redefine el comportamiento por defecto de la variante `dark:`.
+   Todo lo que se escriba como `dark:bg-surface` responde a la clase del <html>.
+   -------------------------------------------------------------------------- */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ==========================================================================
+   1. PALETA CRUDA
+   ==========================================================================
+   Los doce literales de las dos imagenes, sin mas. Ademas el blanco, que es
+   el unico color fuera de la paleta y esta justificado mas abajo.
+   ------------------------------------------------------------------------ */
+@theme static {
+  /* ---- Estructura (imagen 2) ------------------------------------------- */
+  --color-espresso: #603c07; /* el tono mas oscuro de la paleta */
+  --color-brown-deep: #7e6136;
+  --color-brown: #835f2a;
+  --color-tan: #e3c9a2;
+  --color-cream: #e7d3b5;
+  --color-bone: #efefef; /* el tono mas claro de la paleta */
+  --color-white: #ffffff; /* unico color ajeno a la paleta (ver tokens) */
+
+  /* ---- Acentos (imagen 1) ----------------------------------------------
+     Los cinco claros de aqui pueden llevar texto. Los dos marrones no, y por
+    eso viven en otro bloque, con un aviso escrito.                            */
+  --color-sand: #ead3b5;
+  --color-sky: #cde0e9;
+  --color-sage: #b4c3a1;
+  --color-rose: #fdd0d9;
+
+  /* ---- Acentos SIN TEXTO (imagen 1) -------------------------------------
+     Se separan del bloque de arriba a proposito. Con `#603c07` encima estos
+    dos no llegan ni a 3.5:1, asi que son relleno y nunca fondo de algo que
+    lleve letra: chips, badges, bordes, bloques decorativos. */
+  --color-camel: #b5936f; /* con texto encima: 3.43 FALLA */
+  --color-brown-accent: #835f2a; /* con texto encima: 1.69 FALLA */
+
+  /* ---- Tipografia --------------------------------------------------------
+     Se declara aqui y no en un `font-family` suelto para poder usar
+    `font-sans` en cualquier sitio sin acordarse de la pila.                */
+  --font-sans:
+   system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+
+  /* ---- Radio -------------------------------------------------------------
+     Un solo valor para tarjetas, botones y campos. Sin esto cada componente
+    acaba inventandose el suyo y el proyecto se ve desigual.                */
+  --radius-card: 0.75rem;
+  --radius-pill: 9999px;
+}
+
+/* ==========================================================================
+   2. TOKENS SEMANTICOS
+   ==========================================================================
+   Aqui un color deja de ser "el cafe #603c07" y pasa a ser "el texto". Es la
+   capa que se reescribe al cambiar de modo, y la unica que deberia tocarse si
+   dentro de seis meses la marca cambia de color.
+   ------------------------------------------------------------------------ */
+
+:root {
+  /* Declara que los controles nativos (scrollbars, inputs del navegador,
+    checkboxes) se pinten en claro. Sin esto el navegador los deja en claro
+    dentro de un formulario oscuro y se ve roto. */
+   color-scheme: light;
+
+  /* ---- Superficies ------------------------------------------------------- */
+  --bg: var(--color-bone); /* el fondo de la pagina */
+  --surface: var(--color-white); /* tarjetas y paneles: POR ENCIMA del fondo */
+  --surface-2: var(--color-cream); /* rellenos sutiles, bandas, chips */
+
+  /* ---- Lineas ------------------------------------------------------------
+     Hay dos porque no es lo mismo una separacion decorativa que el borde de
+    un campo de formulario. El primero separa, y para eso basta con que se
+    note. El segundo delimita un control interactivo, y ahi el borde es
+    justamente lo que comunica que hay un control pulsable, asi que tiene
+    que cumplir 3:1 (WCAG 1.4.11).
+       --border        #e7d3b5 sobre #efefef = 1.27  -> decorativo, correcto
+       --border-strong #835f2a sobre #efefef = 5.02  -> cumple de sobra      */
+  --border: var(--color-cream);
+  --border-strong: var(--color-brown);
+
+  /* ---- Texto ------------------------------------------------------------- */
+  --text: var(--color-espresso); /* 8.51 sobre fondo, 9.78 sobre tarjeta */
+  --muted: var(--color-brown-deep); /* 5.00 sobre fondo, 5.75 sobre tarjeta */
+
+  /* ---- Accion ------------------------------------------------------------ */
+  --accent: var(--color-brown); /* 5.02 sobre fondo */
+  --on-accent: var(--color-bone); /* 5.02 sobre el acento */
+  /* El hover necesita su propio token y NO puede ser "el acento con
+    brightness", porque los dos modos piden direcciones opuestas: en
+    claro hay que oscurecer y en oscuro hay que aclarar. Con un token
+    separado cada modo declara el suyo y el texto de encima tambien. */
+  --accent-hover: var(--color-espresso);
+  --on-accent-hover: var(--color-bone); /* 8.51 sobre el acento hover */
+
+  /* ---- Degradado ---------------------------------------------------------
+     Solo para BANDA: la cabecera del hero y el panel de llamada. Nunca de
+     fondo de pagina, por dos motivos concretos:
+
+       1. En el visor 3D un fondo degradado hace que la escena se funda con
+          el chrome y se pierde la lectura del objeto.
+       2. A pantalla completa un degradado cansa la lectura de listas largas
+          como el catalogo.
+
+     El texto va a --color-text (#603c07), que sobre el extremo mas oscuro
+     del degradado da 6.70:1.
+
+     Se eligio bone -> sky y no el crema por una razon tecnica, no
+     estetica: es el unico de los claros que mantiene el contraste por encima
+     de 7:1 (7.19, frente a 6.70 del crema y 6.75 de la arena), y el salto de
+     valor se nota lo justo para que la banda se lea como banda sin robarle
+     protagonismo al contenido.
+
+     `sky` es un pastel de la paleta de acento, y aqui se usa como banda, que
+     es un tamano medio. La restriccion de "pastel solo en detalle pequeno"
+     sigue valiendo para rellenos y chips, no para esto. */
+  --gradient-hero: linear-gradient(
+    135deg,
+    var(--color-bone),
+    var(--color-sky)
+  );
+}
+
+.dark {
+   color-scheme: dark;
+
+  /* ---- Superficies -------------------------------------------------------
+     EL PUNTO CLAVE DEL TEMA, y la razon de que no haga falta un cafe mas
+    oscuro que la paleta.
+
+     Aqui `--bg` y `--surface` son el MISMO color. Parece un descuido y es al
+    reves: la version anterior usaba un fondo #4a2d05 (un tono que la
+    marca no habia elegido) solo para poder poner la superficie un escalon
+    mas clara. Sin ese tono, la superficie tendria que ser #7e6136, y
+    entonces el texto apagado sobre ella se queda en 3.94:1 — por debajo del
+     4.5 que WCAG exige para texto normal.
+
+     Con la superficie igual al fondo, el texto apagado da 6.70:1 sobre
+    ambos y el limite del tema se cumple entero sin tocar la paleta. Lo que
+    se cambia a cambio es el ESTILO: las tarjetas se separan por borde en
+    lugar de por relleno. Es un intercambio legitimo, pero conviene saberlo
+    porque se nota mas en claro que en oscuro. */
+  --bg: var(--color-espresso);
+  --surface: var(--color-espresso);
+  --surface-2: var(--color-brown-deep); /* decorativo: sin texto apagado (3.94) */
+
+  /* ---- Lineas ------------------------------------------------------------
+     En claro el borde decorativo es crema sobre casi blanco: se ve porque es
+    mas oscuro que el fondo. En oscuro pasa al reves, un crema sobre cafe no
+    se distinguiria, asi que el decorativo es `#b5936f` (3.43, cumple) y el
+    fuerte es directamente el acento. */
+  --border: var(--color-camel);
+  --border-strong: var(--color-tan);
+
+  /* ---- Texto ------------------------------------------------------------- */
+  --text: var(--color-bone); /* 8.51 sobre fondo y sobre superficie */
+  --muted: var(--color-cream); /* 6.70 sobre fondo y sobre superficie */
+
+  /* ---- Accion ------------------------------------------------------------ */
+  --accent: var(--color-tan); /* 6.12 sobre fondo */
+  --on-accent: var(--color-espresso); /* 6.12 sobre el acento */
+  /* Al reves que en claro, por el motivo escrito arriba: aqui el acento es
+    claro, asi que al pasar el raton se aclara un tono mas. */
+  --accent-hover: var(--color-sand);
+  --on-accent-hover: var(--color-espresso); /* 6.75 sobre el acento hover */
+
+  /* ---- Degradado ---------------------------------------------------------
+     TRES PARADAS, Y LA TERCERA ESTA AHORA MISMO AHI POR UN MOTIVO CONCRETO.
+
+     El degradado es plano en espresso hasta el 90% y solo entonces entra el
+     camel, que se lleva el 10% final. A simple vista es un brillo calido en
+     la esquina inferior derecha.
+
+     Ese 90% no es estetico, es la unica manera de que la paleta admita un
+     tono claro en un degradado. El detalle completo esta en el bloque de
+     tokens semanticos de arriba; resumido: para que #efefef siga cumpliendo
+     4.5:1 sobre el degradado, el tono mas claro tiene que tener luminancia
+     <= 0.1529, y en esta paleta eso deja solo espresso, brown y brown-deep. El
+     camel esta en 0.3184, muy por encima, asi que NO puede aparecer donde
+     se apoye el texto.
+
+     Por eso el texto va a #efefef y se apoya sobre espresso y brown, donde da
+     5.02:1. La punta de camel cae en 2.48:1, asi que ahi no debe haber nunca
+     texto. Es una restriccion de composicion, no un descuido del color, y
+     conviene tenerla presente al maquetar: el ultimo 10% de la banda es
+     territorio sin texto.
+
+     Consecuencia practica: el titular, el parrafo y el boton van en el 90%
+     izquierdo de la banda. Si algun dia hace falta meter texto a la
+     derecha, hay que revisar primero el contraste contra camel. */
+  --gradient-hero: linear-gradient(
+    135deg,
+    var(--color-espresso) 0%,
+    var(--color-brown) 90%,
+    var(--color-camel) 100%
+  );
+}
+
+/* ==========================================================================
+   3. PUENTE
+   ==========================================================================
+   Publica los tokens semanticos como utilidades de Tailwind.
+
+   El `inline` es lo importante, y no es cosmetico. Sin el, Tailwind
+   calcularia el color AHORA y escribiria el literal en el CSS final
+   (`background-color: #603c07`), con lo que `.dark` no tendria efecto sobre
+   esas utilidades. Con `inline` lo que se emite es `var(--surface)` y la
+   utilidad hereda el cambio de token sin volver a compilar nada.
+
+   Asi quedan disponibles: bg-bg, bg-surface, bg-surface-2, text-text,
+   text-muted, border-border, border-border-strong, bg-accent,
+   text-on-accent, bg-gradient-hero
+   ------------------------------------------------------------------------ */
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-on-accent-hover: var(--on-accent-hover);
+  --color-gradient-hero: var(--gradient-hero);
+}
+
+/* ==========================================================================
+   3.b CLASES DE COMPONENTE
+   ==========================================================================
+   Lo que aparece mas de una vez y encima tiene que ser igual en todos los
+   sitios: el boton principal, la tarjeta, la etiqueta.
+
+   Van aqui y no en cada .vue por una razon concreta: un boton reescrito en
+   cuatro paginas es un boton que acabara siendo distinto en la quinta, y
+   ese es el modo normal en que un proyecto se ve desigual sin que nadie
+   haya decidido que lo estuviera.
+
+   Se escriben con @apply en vez de CSS a mano para que sigan saliendo de los
+   tokens: si manana el acento cambia, estos botones cambian con el.
+
+   Se anaden con @apply porque el orden importa: al estar dentro de
+   @layer components, estas clases se emiten ANTES que las utilidades. Asi
+   una utilidad suelta escrita en el template (`hover:bg-sand`) puede pisar
+   lo de aqui, que es justo lo que se quiere. Al reves, un boton definido en
+   un <style scoped> gana siempre y no se deja pisar.
+   ------------------------------------------------------------------------ */
+
+@layer components {
+  /* ---- Boton principal --------------------------------------------------- */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2
+          rounded-pill border border-border
+          px-6 py-2.5 text-sm font-semibold text-text
+          no-underline cursor-pointer
+          transition-colors duration-150
+          hover:border-accent hover:text-accent
+          focus-visible:outline-2 focus-visible:outline-offset-2
+          focus-visible:outline-accent;
+  }
+
+  /* El relleno del boton. Se separa de `.btn` a proposito: hay dos botones y
+    comparten todo menos el fondo y el color del texto. Si fueran uno solo,
+    cada uso tendria que anular a mano lo que no quiere, y a la tercera vez
+    alguien se equivoca. */
+  .btn-primary {
+    @apply border-accent bg-accent text-on-accent
+          hover:bg-accent-hover hover:border-accent-hover
+          hover:text-on-accent-hover;
+  }
+
+  /* ---- Tarjeta -----------------------------------------------------------
+     En modo oscuro `bg-surface` y `bg-bg` son el mismo color, de modo que
+    aqui el borde es lo UNICO que dibuja la tarjeta. Por eso `--border` en
+    oscuro tiene que ser un tono de 3.4:1 y no un crema invisible: si se
+    baja, las tarjetas se pierden en el fondo. */
+  .card {
+    @apply rounded-card border border-border bg-surface p-5;
+  }
+
+  .chip {
+    @apply inline-flex items-center rounded-pill px-3 py-1
+          text-xs font-semibold tracking-wide;
+  }
+}
+
+/* ==========================================================================
+   BASE
+   ==========================================================================
+   Solo lo que Tailwind no pone por su cuenta.
+   ------------------------------------------------------------------------ */
+
+@layer base {
+  * {
+   box-sizing: border-box;
+  }
+   html {
+    /* El fondo del <html> debe seguir al tema ANTES de que Vue monte nada.
+       Con esto el color nunca se ve parpadear en blanco mientras carga la
+      pagina, que es el defecto clasico al conmutar de tema. */
+   background-color: var(--bg);
+  }
+   body {
+   margin: 0;
+   background-color: var(--bg);
+   color: var(--text);
+   font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ------------------------------------------------------------------
+     Sombra de scroll
+     ------------------------------------------------------------------
+     Cuando la pagina se desplaza hacia abajo, el header queda pegado al
+    borde superior. En moviles esa zona la invade el notch o la barra de
+    gestos, y el contenido se come. Con este padding el header reserva el
+    hueco del sensor en vez de solaparse con el.
+     `env(safe-area-inset-*)` vale 0 en escritorio, asi que en escritorio no
+    cambia absolutely nada. Se anade `max()` porque en un movil SIN notch
+    el inset es 0 y sin el max el padding se quedaria en 1rem fijo,
+    perdiendose el margen que queremos en web.
+
+     Es una de las cuatro cosas que hacen falta para que esto sea
+    navegable en movil. Las otras tres: unidades relativas en el layout,
+    `dvh` en lugar de `vh` en las alturas, y permitir el zoom del usuario
+    con `maximum-scale` sin tocar (ya se hace: el viewport de nuxt.config
+    no lo restringe).
+     ------------------------------------------------------------------ */
+  .shell__header {
+   padding-top: max(1rem, env(safe-area-inset-top));
+   padding-left: max(2rem, env(safe-area-inset-left));
+   padding-right: max(2rem, env(safe-area-inset-right));
+  }
+
+  @media (max-width: 640px) {
+    .shell__header {
+     padding-left: max(1rem, env(safe-area-inset-left));
+     padding-right: max(1rem, env(safe-area-inset-right));
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+     animation-duration: 0.01ms !important;
+     animation-iteration-count: 1 !important;
+     transition-duration: 0.01ms !important;
+     scroll-behavior: auto !important;
+    }
+  }
+}

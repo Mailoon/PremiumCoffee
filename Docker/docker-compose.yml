@@ -1,0 +1,159 @@
+name: premiumcoffe
+services:
+  frontend:
+    build:
+      context: ..
+      dockerfile: Docker/frontend.Dockerfile
+      target: app
+    image: premiumcoffe/frontend:pro
+    container_name: premiumcoffe-frontend
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      backend:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      NUXT_API_BASE: ${API_INTERNAL_URL:-http://backend:8080}
+      NUXT_PUBLIC_SITE_URL: ${SITE_PUBLIC_URL:-http://localhost:3000}
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ..
+      dockerfile: Docker/backend.Dockerfile
+    image: premiumcoffe/backend:pro
+    container_name: premiumcoffe-backend
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      DB_URL: ${DB_URL:?DB_URL no esta definido. Copia Docker/.env.example a Docker/.env y rellenalo}
+      DB_USER: ${DB_USER:?DB_USER no esta definido en Docker/.env}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD no esta definido en Docker/.env}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
+
+      CLOUDINARY_ENABLED: ${CLOUDINARY_ENABLED:-false}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+      CLOUDINARY_FOLDER: ${CLOUDINARY_FOLDER:-premiumcoffee}
+      MEDIA_LOCAL_ENABLED: ${MEDIA_LOCAL_ENABLED:-false}
+      MEDIA_LOCAL_ROOT: ${MEDIA_LOCAL_ROOT:-/srv/media}
+      MEDIA_LOCAL_PUBLIC_PATH: ${MEDIA_LOCAL_PUBLIC_PATH:-/media}
+      PORT: "8080"
+      MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-10MB}
+      LOG_FORMAT: ${LOG_FORMAT:-ecs}
+      SPRING_FLYWAY_ENABLED: "false"
+    volumes:
+      - media:/srv/media
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    stop_grace_period: 40s
+    restart: unless-stopped
+  caddy:
+    image: caddy:2-alpine
+    container_name: premiumcoffe-caddy
+    profiles: ["tls"]
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    ports:
+      - "${CADDY_HTTPS_PORT:-8443}:443"
+      - "${CADDY_HTTP_PORT:-8081}:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - media:/srv/media:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  migrate:
+    image: flyway/flyway:11
+    container_name: premiumcoffe-migrate
+    restart: "no"
+    command: ["migrate"]
+    volumes:
+      - ../Backend/src/main/resources/db/migration:/flyway/sql:ro
+    environment:
+      FLYWAY_URL: ${DB_URL:?DB_URL no esta definido. Copia Docker/.env.example a Docker/.env y rellenalo}
+      FLYWAY_USER: ${DB_USER:?DB_USER no esta definido en Docker/.env}
+      FLYWAY_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD no esta definido en Docker/.env}
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql
+      FLYWAY_CONNECT_RETRIES: "30"
+      FLYWAY_VALIDATE_ON_MIGRATE: "true"
+
+volumes:
+  caddy_data:
+  caddy_config:
+  media:
+  frontend_dev_cache:
+
+# ==========================================================================
+# Primera vez (tarda, compila el proyecto en memoria)
+# docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#
+# Ver la recarga en accion
+# docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f frontend
+# ==========================================================================
+# PremiumCoffe — orquestacion local
+#
+#   docker compose up -d                              DESARROLLO (puerto 3001)
+#   docker compose -f docker-compose.yml up -d        PRODUCCION  (puerto 3000)
+#   docker compose --profile tls up -d                DESARROLLO + Caddy (8443)
+#   docker compose -f docker-compose.yml --profile tls up -d   PRODUCCION + Caddy
+# ==========================================================================

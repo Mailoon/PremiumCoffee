@@ -1,0 +1,37 @@
+﻿{
+	# Puerto 80 solo responde para redirigir a HTTPS.
+	# El certificado lo emite y renueva Caddy solo, sin cron ni certbot.
+}
+
+localhost {
+	tls internal
+
+	encode zstd gzip
+
+	header {
+		-Server
+	}
+
+	handle /api/* {
+		reverse_proxy frontend:3000
+	}
+
+	handle /media/* {
+		root * /srv/media
+		header {
+			Cache-Control "public, max-age=31536000, immutable"
+			X-Content-Type-Options nosniff
+		}
+		encode zstd gzip
+		file_server
+	}
+
+	handle {
+		reverse_proxy frontend:3000
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

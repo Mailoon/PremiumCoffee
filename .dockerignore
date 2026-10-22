@@ -1,7 +1,77 @@
-.gradle/
-.idea/
-.kotlin/
-build/
+# ==========================================================================
+# PremiumCoffe — .dockerignore raiz (contexto de build del monorepo)
+#
+# IMPORTANTE — por que .env esta aqui y NO lo bloquea:
+#
+# Este archivo solo controla que archivos se COPIAN dentro de la imagen.
+# No tiene ningun efecto sobre si "docker compose" puede LEER Docker/.env:
+# compose lee ese archivo en el host ANTES de construir la imagen, y lo usa
+# para sustituir ${VARIABLE} en docker-compose.yml. Son dos mecanismos
+# totalmente separados.
+#
+# Por eso .env debe seguir excluido aqui: si no, tus credenciales de
+# Supabase y Cloudinary quedarian selladas en una capa de la imagen, y ahi
+# si quedarian de verdad atrapadas para siempre.
+# ==========================================================================
+
+# --- Secrets: nunca dentro de una capa de imagen -------------------------
 .git/
 .env
-*.log
+.env.*
+**/.env
+**/.env.*
+
+# --- VCS / metadatos ------------------------------------------------------
+.git/
+.github/
+**/.gitignore
+**/.gitattributes
+**/.editorconfig
+
+# --- Dependencias y artefactos de build ----------------------------------
+**/node_modules/
+**/.next/
+**/out/
+**/.turbo/
+**/.vercel/
+**/.gradle/
+**/.kotlin/
+**/build/
+**/dist/
+**/bin/
+**/out/
+**/.mvn/
+**/.idea/
+
+# --- Artefactos de Nuxt ---------------------------------------------------
+# These three are NOT optional.
+#
+# .nuxt is the route manifest and the compile cache that Nuxt writes while
+# you develop. If it sneaks into the build context, the "COPY Frontend/ ./"
+# puts the local .nuxt into the image, and "nuxt build" REUSES it instead of
+# regenerating it.
+#
+# The result is an image with the routes from the last time you ran the
+# dev server locally. If you add a new endpoint and you have not started the
+# dev server, the endpoint does not exist in the image. And if you did
+# start it, the image comes out right, but by accident.
+#
+# It is the worst kind of build bug: it does not fail, it fails when it
+# feels like it. With these three lines, the image depends only on the
+# code in the repository.
+**/.nuxt/
+**/.output/
+**/.nitro/
+**/.data/
+
+# --- Documentacion y entorno de desarrollo -------------------------------
+Docker/ARCHITECTURE.md
+Docker/Caddyfile
+**/*.md
+!Backend/CONTEXT.md
+
+# --- Logs y temporales ---------------------------------------------------
+**/*.log
+**/.DS_Store
+Thumbs.db
+**/.env.local

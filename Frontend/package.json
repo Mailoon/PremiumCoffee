@@ -1,0 +1,30 @@
+{
+  "name": "premiumcoffe-frontend",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "preview": "nuxt preview",
+    "generate": "nuxt generate",
+    "postinstall": "nuxt prepare",
+    "typecheck": "nuxt prepare && vue-tsc -b --force",
+    "prepare-types": "nuxt prepare"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.6.5",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~5.9.3",
+    "vue-tsc": "^3.3.13"
+  },
+  "dependencies": {
+    "nuxt": "^4.0.0",
+    "nuxt-security": "^2.6.0",
+    "vue": "^3.5.0",
+    "vue-router": "^4.4.0"
+  }
+}
