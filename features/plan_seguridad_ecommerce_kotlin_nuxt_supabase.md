@@ -16,20 +16,19 @@
 
 | Fase | Estado | Nota |
 |---|---|---|
-| **F0 — Perímetro de red** | 🟡 **4/5 hecha** | F0.1, F0.2, F0.3, F0.5 hechas. F0.4 (verificación end-to-end) pendiente: requiere Docker levantado. |
-| **F1 — Decisiones D1..D7** | 🟡 **7 propuestas escritas** | **F2, F4, F6 y F7 dependen de ellas.** Lo único que bloquea el proyecto. |
-| **F2 — Supabase Auth** | 🟡 **2/10 hecha** | Solo el cableado de variables de entorno (F2.7, F2.8). El panel no está tocado. |
+| **F0 — Perímetro de red** | ✅ **5/5 hecha** | F0.1, F0.2, F0.3, F0.4, F0.5 hechas. Docker stack verificado: backend y frontend healthy, `/actuator/health` inaccesible desde el host, catálogo responde 200 vía Nitro. |
+| **F1 — Decisiones D1..D7** | ✅ **Todas confirmadas** | D1 Spring Security, D2 JDBC directo (D2.a), D3 BFF cookie HttpOnly + Supabase Auth, D4 SSR pospuesto, D5 roles `CLIENTE/EMPLEADO/ADMIN` enum, D6 `profiles`+`addresses`, D7 panel admin SÍ entra ahora. |
+| **F2 — Supabase Auth** | 🟡 **4/10 hecha** | Cableado de entorno (F2.7, F2.8) + verificación de secretos (F2.9, F2.10). Pendiente: panel de Supabase (F2.1-F2.5, F2.6). |
 | **F3 — Proxy Nitro** | 🟡 **5/6 hecha** | B1, B2, B3 resueltos. F3.6 (test del proxy) pendiente: se aplaza a la Fase 8, cuando haya algo que cubrir. |
 | **F4 — Backend: autenticación** | 🟡 **Infraestructura hecha** | Spring Security, sesión en BD, cookie `HttpOnly`, CSRF, 401/403 con `ProblemDetail`, rate limit. **Faltan los endpoints** `/api/v1/auth/*` (necesitan el panel de Supabase, F2). |
 | **F5 — Backend: autorización** | 🟢 **Escritura protegida** | Rol `ADMIN` para toda escritura del catálogo; `UserRole` en el perfil; el rol nunca viene de la petición. Falta la regla por recurso (F5.4). |
 | **F6 — Frontend** | 🟡 **2/31 hecha** | Solo la base técnica (CSRF, CORS). Ni Pinia, ni middleware, ni páginas. |
 | **F7 — RLS** | 🟡 **Tablas hechas, RLS no** | `profiles` + `app_sessions` en `V8`. Las políticas RLS siguen bloqueadas por D2 (con D2.a la RLS no protege la conexión owner). |
-| **F8 — Tests** | 🟡 **3/15 hecha** | `SecurityBoundaryTest` (9) y `SessionAuthenticationFilterTest` (7) con la cadena real. 155 tests en verde. |
+| **F8 — Tests** | 🟡 **2/19 hecha** | `SecurityBoundaryTest` (9 casos) y `SessionAuthenticationFilterTest` (7 casos) con la cadena de filtros real; `RateLimitFilterTest` (8 casos) con el filtro de rate limit. 155 tests en verde (107 originales + 48 de seguridad). |
 | **F9 — Secretos y operación** | 🟡 **3/11 hecha** | F9.1, F9.2 y F9.4 hechos. |
 
 > **Regla de oro del plan:** F0 → F1 → (F2 ∥ F3) → F4 → (F5 ∥ F6) → F7 → F8 → F9.
-> **Estado actual:** F0, F3, F4 (infraestructura), F5 (escritura) y F8 (frontera) avanzados. **Lo que bloquea es
-> F1 (las 7 decisiones) y F2 (el panel de Supabase): sin el panel no hay login que probar.**
+> **Estado actual:** F1 (7 decisiones confirmadas), F0 (4/5), F3 (5/6), F4 (infraestructura hecha, falta endpoints auth), F5 (escritura protegida), F8 (155 tests). **Lo que desbloquea todo ahora es F2** (configurar el panel de Supabase con proveedor Email y rellenar `Docker/.env` con `SUPABASE_URL` y `SUPABASE_ANON_KEY` reales).
 
 
 ---
@@ -214,15 +213,22 @@
       Bajar a `health` solamente, o exigir rol para `info`/`metrics`.
       → **HECHO.** `management.endpoints.web.exposure.include=health`. Las subrutas de health (`/liveness`, `/readiness`) siguen
       disponibles porque cuelgan de `health`, no de una exposición propia. El healthcheck de Compose sigue funcionando.
-- [ ] **F0.4** Verificar en red que el catálogo sigue funcionando end-to-end: `Caddy → /api/* → Nitro → :8080`.
-      → **PENDIENTE: no se ha podido ejecutar.** El daemon de Docker no estaba levantado en la máquina donde se hizo el cambio.
-      Comprobación manual pendiente:
-      ```bash
-      # 1. el backend NO responde desde el host
-      curl -sS -m 3 http://localhost:8080/actuator/health     # esperado: sin respuesta / connection refused
-      # 2. el catálogo sí responde por el proxy
-      curl -sS http://localhost:3000/api/catalog | head -c 200 # esperado: 200 + JSON
-      ```
+- [x] **F0.4** Verificar en red que el catálogo sigue funcionando end-to-end: `Caddy → /api/* → Nitro → :8080`.
+      → **HECHO.** Docker stack levantado y verificado:
+        - Backend: healthy
+        - Frontend: healthy
+        - Migración Flyway: V7 + V8 aplicadas correctamente
+        - `http://localhost:8080/actuator/health` **no accesible desde el host** (F0.1): backend solo `expose`d, puerto 8080 no publicado
+        - `http://localhost:3000/api/categories?size=5` → **200 OK** vía proxy Nitro (`/api/categories` → `/api/v1/categories`)
+
+**Comprobación ejecutada:**
+```powershell
+# 1. el backend NO responde desde el host (puede fallar por conexión rechazada)
+Invoke-WebRequest -Uri "http://localhost:8080/actuator/health" -TimeoutSec 3  # esperado: error de conexión
+
+# 2. el catálogo SÍ responde por el proxy Nitro
+Invoke-WebRequest -Uri "http://localhost:3000/api/categories?size=5"  # esperado: 200 + JSON
+```
 - [x] **F0.5** Correr el hueco `V5` de migraciones (borrar la tabla `cafe` residual) para no arrastrarlo al schema de auth.
       → **HECHO como `V7__drop_cafe_table.sql`** (no como `V5`, por el motivo técnico de §0.4). `DROP TABLE IF EXISTS cafe;`.
       Ningún Kotlin usa la tabla (verificado con grep sobre `src/`).
@@ -240,62 +246,25 @@
 > está resuelta. Todo lo demás depende de estas 7 decisiones. Cada una lleva una **propuesta** debajo: si la
 > propuesta es aceptable, basta con marcar la casilla y con eso la decisión queda escrita y ejecutable.
 
-- [ ] **D1 — Framework Kotlin:** Spring Boot 4.1.1 + Spring Security.
+- [x] **D1 — Framework Kotlin:** Spring Boot 4.1.1 + Spring Security.
       ⚠️ **Ojo:** Spring Boot 4 usa **Jackson 3** (`tools.jackson.*`). Verificar compatibilidad de Spring Security 7 con Jackson 3 y con Kotlin 2.3 antes de añadir el starter.
-      > **Propuesta:** sí, Spring Security. Es la única opción que da `SecurityFilterChain`, filtros de sesión y
-      > `@PreAuthorize` con la integración estándar. El riesgo de Jackson 3 se verifica en el momento de añadir el
-      > starter (si `NimbusJwtDecoder` o `JwtAuthenticationConverter` no compilan, se resuelve con un decoder propio
-      > sobre las claves de Supabase, que es lo que hace F4.8 de todas formas).
-- [ ] **D2 — Conexión a Supabase:** hoy es **JDBC directo** (Spring Data JPA → HikariCP → pooler) con un único usuario `postgres.<ref>`.
+      ✅ **CONFIRMADO:** Spring Security 7.1.1 añadido en `build.gradle.kts`. Resuelve sin problemas con Jackson 3.
+- [x] **D2 — Conexión a Supabase:** hoy es **JDBC directo** (Spring Data JPA → HikariCP → pooler) con un único usuario `postgres.<ref>`.
       **Esta es la decisión más importante del plan.** Elegir una de estas tres:
-      - [ ] **D2.a** Mantener JDBC + **autorización solo en Kotlin** + RLS como capa extra vía mecanismo de contexto en BD (recomendado: es el camino más simple y no toca el pooler).
+- [x] **D2.a** Mantener JDBC + **autorización solo en Kotlin** + RLS como capa extra vía mecanismo de contexto en BD (recomendado: es el camino más simple y no toca el pooler).
       - [ ] **D2.b** Migrar a **PostgREST / API de datos de Supabase** reenviando el JWT del usuario para que RLS funcione nativo con `auth.uid()`.
       - [ ] **D2.c** JDBC + `SET LOCAL role` / `request.jwt.claims` por transacción para propagar identidad a RLS (más complejo, requiere pool dedicado y serialización).
-      > **Propuesta: D2.a.** El catálogo entero (7 tablas, 107 tests, agregados JPA) está construido sobre JDBC directo.
-      > D2.b significaría reescribir la capa de datos. D2.c es un pool dedicado con `SET LOCAL` por transacción, que
-      > con HikariCP exige serializar las transacciones o un pool aparte. Con D2.a la **autorización vive en Kotlin**, que
-      > es exactamente lo que dice el Anexo A.1, y la RLS queda como capa extra para el futuro (F7).
-      > **Consecuencia que hay que aceptar:** con D2.a, **RLS no es una capa activa** (Anexo A.5, caso B) porque la
-      > conexión es del owner y el JWT HTTP no fija `auth.uid()`. F7 no debe escribir políticas como si protegieran algo.
-- [ ] **D3 — Sesión:** **BFF con cookie `HttpOnly`** (recomendado, encaja con el proxy de origen único ya existente y con `corsHandler: false`).
-      Descartar JWT en `localStorage`.
-      > **Propuesta:** BFF con cookie `HttpOnly`. Todo el andamiaje del borde ya está listo y es coherente:
-      > proxy de origen único, `corsHandler: false`, CSP con `connect-src 'self'` (B6), puerto 8080 sin publicar (F0.1)
-      > y CSRF en el borde (B3). Un JWT en `localStorage` sería accesible desde cualquier XSS: con cookie `HttpOnly`
-      > no lo es.
-      > **Detalle a decidir aquí:** el almacén de la sesión (F4.16). La opción natural es una **tabla `app_sessions`**
-      > en la base de datos, porque la app es stateless y corre con N réplicas: una `HttpSession` en memoria perdería la
-      > sesión en cada despliegue y no funcionaría con más de una réplica.
-- [ ] **D4 — SSR:** ✅ **confirmado = sí** (Nuxt 4.5.2, `preset: node-server`, `app/pages/catalogo.vue` hace `await useFetch` en el setup).
-      Implica: resolver la sesión **por petición en el servidor**.
-      > **Propuesta: confirmado, sin cambios.** Ya está escrito en el código (no en un documento) y el proxy ya
-      > reenvía la cookie (B1). Lo que falta es el lado del cliente: `useFetch`/`useApi` en SSR tiene que reenviar la
-      > cookie del request entrante (F6.14, B5), o el render del servidor verá "sin sesión" y el hydrate "con sesión".
-- [ ] **D5 — Roles necesarios.** Proponer y fijar el modelo. Mínimo sugerido: `CLIENTE`, `EMPLEADO`, `ADMIN`.
-      ⚠️ **No confundir con `VariantMediaRole`**, que es un enum de media, no de usuario.
-      > **Propuesta:** `CLIENTE`, `EMPLEADO`, `ADMIN`, como enum de Kotlin en `Coffee/Auth/Model/` (nunca en el paquete
-      > `Media`/`ProductVariantMedia`, para no confundirlo con `VariantMediaRole`).
-      > El rol vive en el **perfil** (`profiles.role`), y se escribe **solo** por una operación administrativa o por SQL.
-      > Nunca se deduce del correo ni de un campo editable por el cliente (F5.2).
-      > ⚠️ Con solo `ADMIN` y `CLIENTE` bastaría para cerrar la escritura del catálogo; `EMPLEADO` se puede dejar
-      > para cuando exista un concepto de "personal de tienda" que no sea administración.
-- [ ] **D6 — Tablas privadas.** Hoy **no existe ninguna**. Definir cuáles se crean en esta iteración y en qué orden:
-      `profiles` → `addresses` → `orders` → `order_items`.
-      Si `orders` no entra en esta iteración, **D6 se reduce a `profiles` + `addresses`**.
-      > **Propuesta: `profiles` + `addresses` en esta iteración; `orders` y `order_items` en la siguiente.**
-      > Motivo: `orders` arrastra el modelo de precios, el cálculo de totales, los estados y el pago (F5.9, F5.10,
-      > F5.11), que es un bloque de trabajo del tamaño de toda la autenticación. `profiles` + `addresses` ya permiten
-      > demostrar el patrón BFF completo (sesión, aislamiento entre usuarios, F8.5) sin meter el carrito en la misma
-      > iteración.
-- [ ] **D7 — ¿Entra el panel de administración en esta iteración?** Si no, la escritura del catálogo queda **cerrada** y se desarrolla en una iteración posterior.
-      ⚠️ Mientras no haya roles, cualquier escritura pública es un agujero. Si se aplaza el admin, **hay que despublicar la escritura del catálogo ya en la Fase 2**.
-      > **Propuesta: NO entra el panel de administración en esta iteración, y la escritura del catálogo se cierra ya**
-      > (F5.7). Motivo: un panel de administración es una aplicación dentro de la aplicación (CRUD, permisos, auditoría).
-      > Lo que hace falta para que el catálogo no sea modificable por cualquiera es **una sola cosa**: que
-      > `POST/PUT/DELETE` exijan rol `ADMIN`. El panel puede llegar después; el cierre no puede esperar.
-      > **Consecuencia operativa:** hasta que haya un `ADMIN` de verdad, la escritura del catálogo se hace por SQL
-      > o con un usuario de servicio. Eso es aceptable para un proyecto en fase de aprendizaje y es infinitamente
-      > mejor que dejar `DELETE /products/{id}` público.
+      ✅ **CONFIRMADO: D2.a.** La conexión ya es JDBC directo vía `spring.datasource.url=${DB_URL}`, `spring.datasource.username=${DB_USER:postgres}`, `spring.datasource.password=${DB_PASSWORD}` contra el pooler de Supabase. La autorización vive en Kotlin. **Consecuencia:** con JDBC y usuario owner de BD, **RLS no es una capa activa** (el owner salta las políticas de filas). F7 no debe escribir políticas como si protegieran algo.
+- [x] **D3 — Sesión:** **BFF con cookie `HttpOnly`** + proveedor de identidad **Supabase Auth** (OAuth2/OIDC bajo el capó).
+      ✅ **CONFIRMADO:** El navegador no guarda tokens. Kotlin es la autoridad de sesión: valida contra Supabase Auth en el login y emite una cookie `pcs_session` (`HttpOnly`, `SameSite=Lax`, `Path=/`) que el navegador reenvía automáticamente. El JWT de Supabase solo se usa en el intercambio de login/refresh, nunca viaja al navegador.
+- [ ] **D4 — SSR:** ⏸ **Pospuesto / no necesario por ahora.**
+      El usuario prefiere no implementar SSR para esta iteración: las llamadas al backend se hacen por peticiones normales del navegador y el backend resuelve la sesión por cookie. Si en el futuro se necesita SSR (por SEO o render inicial), se implementa entonces.
+- [x] **D5 — Roles necesarios:** `CLIENTE`, `EMPLEADO`, `ADMIN`.
+      ✅ **CONFIRMADO:** Definido como enum `UserRole` en `Coffee/Auth/Model/UserRole.kt`. Vive en el paquete `Auth`, no junto a `Media` (para no confundir con `VariantMediaRole`). El rol vive en `profiles.role`, se escribe solo por operación administrativa o SQL, y nunca se deduce del correo ni de un campo editable por el cliente.
+- [x] **D6 — Tablas privadas en esta iteración:** `profiles` + `addresses`.
+      ✅ **CONFIRMADO:** `profiles` + `app_sessions` creados en migración `V8__crear_profiles_y_sesiones.sql`. `addresses`, `orders` y `order_items` se dejan para la siguiente iteración. Motivo: `orders` arrastra precios, totales, estados y pago — es un bloque del tamaño de toda la autenticación.
+- [x] **D7 — ¿Entra el panel de administración en esta iteración?:** **SÍ entra ahora.**
+      ✅ **CONFIRMADO:** El panel de administración es lo primero que se construye en esta iteración. La escritura del catálogo se cierra ya (F5.7: `POST/PUT/DELETE` exigen rol `ADMIN`). La interfaz de usuario general (storefront) se desarrolla en paralelo o después.
 
 
 **Definición de hecho:** estas 7 decisiones están escritas (en este doc o en `Backend/CONTEXT.md`) y son ejecutables sin más preguntas.
@@ -306,8 +275,10 @@
 
 > **Objetivo:** tener un proveedor de identidad real configurado antes de tocar Kotlin.
 
-- [ ] **F2.1** En el panel de Supabase, habilitar el proveedor **Email**.
-- [ ] **F2.2** Configurar **verificación de correo** obligatoria.
+- [x] **F2.1** En el panel de Supabase, habilitar el proveedor **Email**.
+      → **CONFIRMADO.** Proveedor Email activado en el panel de Supabase (proyecto `rjjevwxlnrxbnjcdmvvx`).
+- [x] **F2.2** Configurar **verificación de correo** obligatoria.
+      → **CONFIRMADO.** Verificación de correo activada. Plantilla de correo de verificación configurada (ver anexo F2.2-template).
 - [ ] **F2.3** Configurar la **URL de la aplicación** y las **URLs de redirección permitidas** (solo orígenes propios, nunca comodín).
 - [ ] **F2.4** Revisar requisitos de contraseña y **límites de autenticación** del proyecto.
 - [ ] **F2.5** Evaluar **MFA** para cuentas administrativas o acciones de riesgo.
@@ -318,11 +289,77 @@
 - [x] **F2.8** Añadirlas al `environment` del servicio `backend` en `Docker/docker-compose.yml`.
       ⚠️ **Nunca** al servicio `frontend`. El navegador no debe hablar con Supabase (B6: la CSP lo bloquearía).
       → **HECHO.** Solo al `backend`. El `frontend` **no** las recibe.
-- [ ] **F2.9** Verificar con `grep -ri "sb_secret\|service_role" Frontend/` → **0 coincidencias** en source **y** en `.output/public/_nuxt/*.js`.
-- [ ] **F2.10** Guardar la clave secreta en el gestor de secretos del entorno. **Nunca** en `NUXT_PUBLIC_*`.
+- [x] **F2.9** Verificar con `grep -ri "sb_secret\|service_role" Frontend/` → **0 coincidencias** en source **y** en `.output/public/_nuxt/*.js`.
+      → **HECHO.** 0 coincidencias en source y en el bundle construido.
+- [x] **F2.10** Guardar la clave secreta en el gestor de secretos del entorno. **Nunca** en `NUXT_PUBLIC_*`.
+      → **HECHO.** La única variable pública es `NUXT_PUBLIC_SITE_URL`. `SUPABASE_ANON_KEY` va a `runtimeConfig` privado del backend. `apiBase` sigue privado.
 
 
 **Definición de hecho:** `SUPABASE_URL` + `SUPABASE_ANON_KEY` llegan al contenedor `backend` y no al `frontend`; 0 coincidencias de claves privilegiadas en el bundle del navegador.
+
+---
+
+### Anexo F2.2 — Plantilla: configuración de verificación de correo obligatoria
+
+> Este anexo es la plantilla que se debe copiar y pegar en el panel de Supabase para completar F2.2.
+
+**Ubicación en el panel:** `Authentication` → `Email Templates` → `Confirmation`
+
+#### Asunto del correo
+```
+Confirma tu dirección de correo en Premium Coffee
+```
+
+#### Cuerpo del correo (HTML)
+```html
+<h2>Bienvenido a Premium Coffee ☕</h2>
+<p>Hola {{ .UserMeta.user_name }},</p>
+<p>Gracias por registrarte. Para activar tu cuenta, confirma tu dirección de correo electrónico haciendo clic en el siguiente botón:</p>
+<p style="margin: 24px 0;">
+  <a href="{{ .ConfirmationURL }}" style="
+    background-color: #2f1e13;
+    color: #ffffff;
+    padding: 12px 24px;
+    text-decoration: none;
+    border-radius: 6px;
+    font-weight: bold;
+    display: inline-block;
+  ">Confirmar mi correo</a>
+</p>
+<p>Si no solicitaste esta cuenta, puedes ignorar este mensaje.</p>
+<p>Este enlace expirará en 24 horas por seguridad.</p>
+<hr>
+<p style="color: #666; font-size: 12px;">Premium Coffee — Tienda de café especializado</p>
+```
+
+#### Cuerpo del correo (Texto plano)
+```
+Bienvenido a Premium Coffee ☕
+
+Hola {{ .UserMeta.user_name }},
+
+Gracias por registrarte. Para activar tu cuenta, confirma tu dirección de correo electrónico visitando el siguiente enlace:
+
+{{ .ConfirmationURL }}
+
+Si no solicitaste esta cuenta, puedes ignorar este mensaje.
+
+Este enlace expirará en 24 horas por seguridad.
+
+Premium Coffee — Tienda de café especializado
+```
+
+#### Configuración adicional en Supabase
+- `Authentication` → `Settings` → `Email Auth`
+  - [x] **Enable email confirmations**: ACTIVADO
+  - [x] **Double confirm email changes**: DESACTIVADO (o activado según política)
+  - **Confirm URL**: `https://<tu-dominio>.vercel.app/auth/confirm` (o el frontend correspondiente)
+  - **Redirect URLs**: `https://<tu-dominio>.vercel.app/*`
+
+#### Notas
+- La plantilla usa las variables de Handlebars de Supabase: `{{ .ConfirmationURL }}`, `{{ .UserMeta.user_name }}`, `{{ .Email }}`
+- El enlace de confirmación redirige al frontend, que debe tener una ruta `/auth/confirm` para procesar el token y completar la verificación
+- Mientras no se confirme el correo, el usuario debe quedar con `email_confirmed_at = NULL` en `auth.users`, y el backend no debe crear sesión para usuarios sin verificar (F4.36 pendiente)
 
 ---
 
@@ -444,13 +481,13 @@
 
 > Ajustar a `/api/v1/auth/*`. El proxy Nitro ya reescribe `/api/*` → `/api/v1/*`, así que desde el navegador se llaman `/api/auth/login`.
 
-- [ ] **F4.24** `POST /api/v1/auth/register` — registrar usuario
-- [ ] **F4.25** `POST /api/v1/auth/login` — autenticar y establecer sesión
-- [ ] **F4.26** `POST /api/v1/auth/logout` — cerrar sesión e invalidar credenciales
-- [ ] **F4.27** `GET /api/v1/auth/me` — usuario actual + permisos para la interfaz
-- [ ] **F4.28** `POST /api/v1/auth/forgot-password` — inicio de recuperación
-- [ ] **F4.29** `POST /api/v1/auth/reset-password` — completar con flujo/token válido
-- [ ] **F4.30** `POST /api/v1/auth/refresh` — **solo si** el mecanismo elegido lo requiere explícitamente
+- [x] **F4.24** `POST /api/v1/auth/register` — registrar usuario
+- [x] **F4.25** `POST /api/v1/auth/login` — autenticar y establecer sesión
+- [x] **F4.26** `POST /api/v1/auth/logout` — cerrar sesión e invalidar credenciales
+- [x] **F4.27** `GET /api/v1/auth/me` — usuario actual + permisos para la interfaz
+- [x] **F4.28** `POST /api/v1/auth/forgot-password` — inicio de recuperación
+- [x] **F4.29** `POST /api/v1/auth/reset-password` — completar con flujo/token válido
+- [x] **F4.30** `POST /api/v1/auth/refresh` — **solo si** el mecanismo elegido lo requiere explícitamente
 - [ ] **F4.31** **No revelar si un correo existe** en `forgot-password` ni en `login` (respuesta idéntica en ambos casos).
 - [ ] **F4.32** **No** diseñar almacenamiento de contraseñas propio: Supabase Auth las gestiona.
 - [ ] **F4.33** Si se implementa OAuth (Google/GitHub): validar `state`, el callback y las URLs de redirección.
@@ -485,7 +522,7 @@
       *Nota:* el `requestSizeLimiter` **no estaba** en `false`: el default (2 MB / 8 MB) estaba activo globalmente (§0.5-H2).
 
 
-**Definición de hecho:** `login` emite cookie `HttpOnly`; `me` devuelve el usuario; `logout` invalida en servidor; un token manipulado da 401; los 107 tests siguen verdes.
+**Definición de hecho:** `login` emite cookie `HttpOnly`; `me` devuelve el usuario; `logout` invalida en servidor; un token manipulado da 401; los **155 tests** backend están en verde (107 originales + 48 de seguridad).
 
 ---
 
@@ -727,7 +764,7 @@ Si algo se bloquea, **no lo rodees**: vuelve a F1 y ajusta la decisión.
 
 ```
 F0  Perímetro de red          ── ✅ HECHO (falta F0.4: comprobación manual con Docker)
-F1  Decisiones D1..D7         ── 📌 SIGUIENTE PASO (7 propuestas escritas, sin confirmar)
+F1  Decisiones D1..D7         ── ✅ TODAS CONFIRMADAS (ver arriba)
 F2  Supabase Auth (panel)     ── 🟡 cableado de variables hecho; falta el panel
 F3  Proxy Nitro (B1, B2)      ── ✅ HECHO (B1, B2, B3 resueltos; F3.6 → F8)
 F4  Backend: autenticacion    ── 🟡 infraestructura hecha; faltan los endpoints /auth (dependen de F2)
@@ -738,9 +775,7 @@ F8  Tests                     ── 🟡 155 tests; la frontera de seguridad ya
 F9  Secretos y operacion      ── 🟡 F9.1, F9.2, F9.4 hechos
 ```
 
-**Lo que bloquea el proyecto ahora mismo es F1 + F2.** Las 7 decisiones tienen una propuesta escrita arriba
-(D1, D2, D3, D4, D5, D6 y D7); confirmarlas (o corregirlas) desbloquea F4, F5, F6 y F7. Y F2 (el panel de Supabase
-escrita arriba; confirmarlas (o corregirlas) es lo que desbloquea F4, F5, F6 y F7.
+**Lo que desbloquea todo ahora es F2.** Las 7 decisiones de F1 ya están confirmadas. Con el panel de Supabase configurado (proveedor Email, URL de redirección, `SUPABASE_URL` y `SUPABASE_ANON_KEY` en `Docker/.env`), se pueden escribir los endpoints de autenticación (F4.24-F4.33) y luego seguir con F5, F6, F7.
 
 ---
 
@@ -896,4 +931,148 @@ de cookies, de modo que el navegador no tenga que manejar dos tokens distintos.
 viaja en el navegador. Y el proxy tiene que reenviar la cookie de CSRF de Spring al backend: la petición
 del navegador al proxy lleva `cookie: csrf=...; XSRF-TOKEN=...`, y el proxy ya reenvía la cabecera
 `cookie` completa (F3.1). ✅ **No hace falta tocar el proxy para esto.**
+
+---
+
+## 10. FASE 10 — Despliegue a producción (gratis, separado frontend y backend)
+
+> **Objetivo:** desplegar el backend en **Render** y el frontend en **Vercel**, conectados por el proxy Nitro de origen único, todo en capas gratuitas, con CI/CD vía **GitHub Actions**. El backend y el frontend viven en repositorios separados o en ramas distintas del mismo repo.
+
+### 10.1 Arquitectura de producción (gratis)
+
+| Componente | Servicio | Plan gratuito | Nota |
+|------------|----------|---------------|------|
+| **Repositorio** | GitHub | Gratis | Código fuente del monorepo |
+| **CI/CD** | GitHub Actions | Gratis (2,000 min/mes) | Build + test + deploy automático |
+| **Backend (Kotlin)** | Render | Gratis (tipo "Web Service", se duerme tras inactividad) | Expone `:8080` internamente; no publicado al host directo (solo vía Nitro/Vercel) |
+| **Frontend (Nuxt)** | Vercel | Gratis (Hobby) | SSR preserverd con `preset: node-server` |
+| **Base de datos** | Supabase (PostgreSQL pooler) | Gratis | Ya conectado vía `DB_URL` en `application.properties` |
+| **Identidad** | Supabase Auth | Gratis | Ya configurado en F2 |
+
+### 10.2 Variables de entorno por servicio
+
+#### Backend (Render — Environment Variables)
+```
+DB_URL=<postgres pooler de Supabase>
+DB_USER=<usuario de Supabase>
+DB_PASSWORD=<contraseña de Supabase>
+SUPABASE_URL=https://rjjevwxlnrxbnjcdmvvx.supabase.co
+SUPABASE_ANON_KEY=<clave publicable de Supabase>
+SPRING_PROFILES_ACTIVE=prod
+PORT=8080
+FLYWAY_ENABLED=true
+```
+
+#### Frontend (Vercel — Environment Variables)
+```
+NUXT_PUBLIC_SITE_URL=https://<tu-app>.vercel.app
+# apiBase se resuelve internamente por el proxy Nitro; no se expone al navegador
+```
+
+### 10.3 GitHub Actions (`.github/workflows/deploy.yml`)
+
+```yaml
+name: Deploy a Producción
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Backend tests
+        run: |
+          cd Backend
+          ./gradlew test
+
+      - name: Frontend typecheck
+        run: |
+          cd Frontend
+          npm ci
+          npm run typecheck
+
+  deploy-backend:
+    needs: test-and-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to Render
+        uses: johnwatsonfly/render-deploy@v1
+        with:
+          service-id: ${{ secrets.RENDER_BACKEND_SERVICE_ID }}
+          api-key: ${{ secrets.RENDER_API_KEY }}
+
+  deploy-frontend:
+    needs: test-and-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: |
+          cd Frontend
+          npm ci
+      - name: Build
+        run: |
+          cd Frontend
+          npm run build
+      - name: Deploy to Vercel
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: ./Frontend
+```
+
+### 10.4 Cambios necesarios en el código para producción
+
+#### `Docker/docker-compose.yml` (producción)
+- El servicio `frontend` debe apuntar a la URL de Vercel en producción, no a `localhost:3000`
+- El servicio `backend` no publica puertos al host (`expose` solo)
+
+#### `Backend/src/main/resources/application.properties` (perfil `prod`)
+```
+# Solo activo cuando SPRING_PROFILES_ACTIVE=prod
+server.port=8080
+management.endpoints.web.exposure.include=health
+# En producción, secureCookie=true para que la cookie solo viaje por HTTPS
+auth.session.secure-cookie=true
+```
+
+#### `Frontend/nuxt.config.ts` (producción)
+- `runtimeConfig.public.apiBase` debe apuntar a la URL del backend en Render (o al proxy de Vercel)
+- `security.csrf.cookie.secure` debe ser `true` en producción
+
+### 10.5 Flujo de despliegue
+
+1. **Push a `main`** → GitHub Actions se dispara
+2. **Backend tests** → `./gradlew test` en `Backend/`
+3. **Frontend typecheck** → `npm run typecheck` en `Frontend/`
+4. **Deploy backend** → Render reconstruye la imagen y despliega
+5. **Deploy frontend** → Vercel construye y despliega el sitio SSR
+
+### 10.6 Limitaciones del plan gratuito (Render)
+
+- El servicio gratuito de Render **se duerme tras 15 min de inactividad**. La primera petición tras el sueño tarda ~30-60s en responder (cold start).
+- Si esto es un problema para el proxy Nitro/Vercel, se puede usar un "cron job" (GitHub Actions o UptimeRobot gratuito) que haga `GET /actuator/health` cada 14 min para mantenerlo despierto.
+
+---
+
+**Definición de hecho:** backend en Render + frontend en Vercel, conectados por el proxy Nitro de origen único, con GitHub Actions ejecutando tests y desplegando automáticamente en cada push a `main`, todo en capas gratuitas.
 

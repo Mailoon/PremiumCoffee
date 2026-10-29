@@ -1,5 +1,7 @@
 package Coffee.Configuration
 
+import Coffee.Auth.Configuration.SupabaseAuthProperties
+import Coffee.Configuration.SessionProperties
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.web.servlet.FilterRegistrationBean
 import org.springframework.context.annotation.Bean
@@ -8,7 +10,11 @@ import org.springframework.core.Ordered
 import tools.jackson.databind.ObjectMapper
 
 @Configuration
-@EnableConfigurationProperties(RateLimitProperties::class)
+@EnableConfigurationProperties(
+    RateLimitProperties::class,
+    SessionProperties::class,
+    SupabaseAuthProperties::class
+)
 class RateLimitConfiguration {
 
     /**

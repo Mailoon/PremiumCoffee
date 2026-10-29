@@ -43,12 +43,6 @@ class SessionService(
         return token
     }
 
-    /**
-     * Resolves a token into its session, or null when it is not usable.
-     *
-     * A session stops working when it is revoked, when it passes the absolute
-     * cap, or when it sits unused for longer than the idle timeout.
-     */
     @Transactional
     fun resolve(token: String): AppSession? {
         val now = Instant.now()
@@ -66,7 +60,6 @@ class SessionService(
         return session
     }
 
-    /** Invalidates the session on the server. Clearing the cookie is not enough. */
     @Transactional
     fun revoke(session: AppSession) {
         if (!session.isRevoked()) {
@@ -74,7 +67,6 @@ class SessionService(
         }
     }
 
-    /** Invalidates every session of a user, e.g. when the account is suspended. */
     @Transactional
     fun revokeAll(profileId: UUID) {
         val now = Instant.now()
@@ -92,7 +84,7 @@ class SessionService(
     private fun hash(token: String): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(token.toByteArray(Charsets.UTF_8))
         return digest.joinToString("") { "%02x".format(it) }
-    }1
+    }
 
     private companion object {
         private val secureRandom = SecureRandom()
