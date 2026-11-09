@@ -2,9 +2,9 @@ name: CI PremiumCoffe
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
-    branches: [main]
+    branches: [master]
 
 jobs:
   test-and-build:
@@ -42,7 +42,7 @@ jobs:
   deploy-backend:
     needs: test-and-build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && secrets.RENDER_API_KEY != ''
+    if: github.ref == 'refs/heads/master' && secrets.RENDER_API_KEY != ''
     steps:
       - uses: actions/checkout@v4
       - name: Deploy to Render
@@ -54,7 +54,7 @@ jobs:
   deploy-frontend:
     needs: test-and-build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && secrets.VERCEL_TOKEN != ''
+    if: github.ref == 'refs/heads/master' && secrets.VERCEL_TOKEN != ''
     steps:
       - uses: actions/checkout@v4
       - name: Install deps

@@ -7,6 +7,7 @@ import {
   setResponseHeader,
   type H3Event
 } from 'h3'
+import { useRuntimeConfig } from '#imports'
 
 const API_VERSION_PREFIX = '/api/v1'
 
@@ -113,7 +114,3 @@ function readSetCookies(headers: Headers): string[] {
     .map((cookie) => cookie.trim())
     .filter(Boolean)
 }
-function useRuntimeConfig(event: H3Event) {
-  throw new Error('Function not implemented.')
-}
-
