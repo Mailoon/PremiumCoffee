@@ -1,10 +1,11 @@
-FROM node:22-alpine@sha256:2c752226d477b4a886378baa95b9af252be59301b725fdb0b7e15208131505a8 AS deps
+ARG NODE_IMAGE=node:22-alpine@sha256:2c752226d477b4a886378baa95b9af252be59301b725fdb0b7e15208131505a8
+FROM ${NODE_IMAGE} AS deps
 WORKDIR /app
 
 COPY Frontend/package.json Frontend/package-lock.json* ./
 RUN npm ci --no-audit --no-fund
 
-FROM node:22-alpine@sha256:2c752226d477b4a886378baa95b9af252be59301b725fdb0b7e15208131505a8 AS build
+FROM ${NODE_IMAGE} AS build
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
@@ -13,7 +14,7 @@ COPY Frontend/ ./
 ENV NUXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-FROM node:22-alpine@sha256:2c752226d477b4a886378baa95b9af252be59301b725fdb0b7e15208131505a8 AS app
+FROM ${NODE_IMAGE} AS app
 WORKDIR /app
 
 ENV NODE_ENV=production \

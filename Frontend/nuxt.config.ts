@@ -28,10 +28,10 @@ export default defineNuxtConfig({
 
   devtools: { enabled: false },
   runtimeConfig: {
-    apiBase: 'http://backend:8080',
+    apiBase: process.env.NUXT_API_BASE || 'http://backend:8080',
 
     public: {
-      siteUrl: 'http://localhost:3000'
+      siteUrl: process.env.NUXT_PUBLIC_SITE_URL || 'http://localhost:3000'
     }
   },
 
