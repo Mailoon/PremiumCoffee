@@ -1,27 +1,7 @@
 <script setup lang="ts">
-// ==========================================================================
-// Comparador de degradados. SE CONSERVA.
-//
-// Los colores salen del tema por `usePalette()`, que los lee de las variables
-// que main.css ya tiene escritas. Aqui no hay ningun hex: si el tema cambia,
-// esta pagina cambia con el y no puede desincronizarse.
-//
-// Cada tarjeta mide DOS contrastes, y son dos medidas distintas:
-//
-//   - El grande es el contraste donde SE APOYA EL TEXTO.
-//   - El pequeno (`todo: X`) es el que daria un analisis automatico si el
-//     texto se repartiera por todo el recorrido del degradado.
-//
-// Solo aparece el pequeno cuando difieren del grande. Ponerlo siempre seria
-// ruido: dos numeros repetidos hacen pensar que hay dos pruebas cuando en
-// realidad hay una.
-// ==========================================================================
 
 const { palette, ready } = usePalette()
 
-// --------------------------------------------------------------------------
-// Utilidades de contraste (WCAG 2.1).
-// --------------------------------------------------------------------------
 function parseHex(h: string): [number, number, number] {
   const s = h.replace('#', '').trim()
   const full =

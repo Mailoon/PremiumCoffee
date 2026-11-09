@@ -11,6 +11,8 @@ import org.springframework.http.HttpStatusCode
 import org.springframework.http.ProblemDetail
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
+import org.springframework.security.access.AccessDeniedException
+import org.springframework.security.core.AuthenticationException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
@@ -95,6 +97,13 @@ class ApiExceptionHandler {
     fun handleUploadTooLarge(exception: MaxUploadSizeExceededException): ResponseEntity<ProblemDetail> =
         problem(HttpStatus.CONTENT_TOO_LARGE, "The uploaded file exceeds the maximum allowed size")
 
+    @ExceptionHandler(AuthenticationException::class)
+    fun handleAuthentication(exception: AuthenticationException): ResponseEntity<ProblemDetail> =
+        problem(HttpStatus.UNAUTHORIZED, "Authentication required")
+
+    @ExceptionHandler(AccessDeniedException::class)
+    fun handleAccessDenied(exception: AccessDeniedException): ResponseEntity<ProblemDetail> =
+        problem(HttpStatus.FORBIDDEN, "Insufficient permissions")
     private fun problem(status: HttpStatusCode, message: String): ResponseEntity<ProblemDetail> =
         ResponseEntity.status(status).body(ProblemDetail.forStatusAndDetail(status, message))
 

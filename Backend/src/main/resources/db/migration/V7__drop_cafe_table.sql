@@ -1,0 +1,34 @@
+-- ==========================================================================
+-- V7 - Elimina la tabla residual "cafe" (F0.5)
+-- ==========================================================================
+-- "cafe" la creo V1__crear_tabla_cafe.sql como tabla de prueba del proyecto
+-- inicial. Nunca llego a tener entidad, servicio ni endpoint: hoy no hay
+-- ningun Kotlin que la use (verificado con grep sobre src/).
+--
+-- Se deja viva hasta aqui, y no en V5, por una razon tecnica concreta:
+--
+--   Las migraciones V1, V2, V3, V4 y V6 YA estan aplicadas en la base de
+--   datos. Flyway, con outOfOrder=false (el valor por defecto, y el que
+--   fijamos explicitamente en el Job "migrate" de docker-compose.yml),
+--   RECHAZA arrancar si encuentra una migracion sin aplicar cuya version sea
+--   MENOR que la ultima aplicada:
+--
+--       "Detected resolved migration not applied to database: 5"
+--
+--   O sea: meter un V5 ahora no limpia el historial, rompe el arranque.
+--   Por eso esta limpieza entra como V7, que si se aplica en orden.
+--
+--   Consecuencia asumida: el hueco del V5 se queda. Flyway no se queja de
+--   huecos, solo de migraciones pendientes por debajo de la version actual.
+--   Las siguientes migraciones (roles, perfiles, sesiones, RLS) empiezan
+--   por V8.
+--
+-- Es una migracion de una sola sentencia, sin dependencias: la tabla no la
+-- referencia ninguna FK ni ninguna vista.
+--
+-- DROP TABLE y no DELETE: la tabla no tiene datos utiles y lo que se quiere
+-- es que no exista. "IF EXISTS" hace que la migracion sea idempotente en
+-- caso de que alguien la aplique sobre una base donde ya no estuviera.
+-- ==========================================================================
+
+DROP TABLE IF EXISTS cafe;

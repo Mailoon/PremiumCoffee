@@ -1,19 +1,6 @@
 <script setup lang="ts">
-// ==========================================================================
-// Contenedor raiz. Aporta el cromo comun (marca, nav, conmutador de tema).
-// El color, el espacio y el tipo salen todos de los tokens de
-// assets/css/main.css: aqui no hay ni un literal.
-// ==========================================================================
-
 const { isDark, toggle } = useTheme()
 
-// El atributo va en el <html> y NO en un div. Eso es lo que hace que
-// `dark:` responda al tema y lo que evita el parpadeo: como la preferencia
-// llega por cookie, useHead la resuelve en el servidor y el HTML ya sale
-// con la clase correcta.
-//
-// Ojo: `htmlAttrs.class` administra el atributo entero. Si algun dia se anade
-// otra clase al <html> desde fuera, hay que acumularla aqui o se perdera.
 useHead({
   htmlAttrs: {
     class: computed(() => (isDark.value ? 'dark' : 'light'))
