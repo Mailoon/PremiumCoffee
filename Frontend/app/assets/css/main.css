@@ -2,6 +2,10 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ---------------------------------------------------------------------------
+   Tokens de paleta (visibles para Tailwind -> generan utilidades como
+   bg-brown, text-espresso, rounded-pill, font-sans, etc.)
+   --------------------------------------------------------------------------- */
 @theme static {
   --color-espresso: #603c07; /* el tono mas oscuro de la paleta */
   --color-brown-deep: #7e6136;
@@ -26,7 +30,9 @@
   --radius-pill: 9999px;
 }
 
-
+/* ---------------------------------------------------------------------------
+   Variables semanticas por tema (claro / oscuro).
+   --------------------------------------------------------------------------- */
 :root {
    color-scheme: light;
   --bg: var(--color-bone); /* el fondo de la pagina */
@@ -78,6 +84,11 @@
     var(--color-camel) 100%
   );
 }
+
+/* ---------------------------------------------------------------------------
+   Mapea las variables semanticas a utilidades de Tailwind
+   (bg-bg, text-text, border-border, bg-surface, text-accent, etc.)
+   --------------------------------------------------------------------------- */
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);
