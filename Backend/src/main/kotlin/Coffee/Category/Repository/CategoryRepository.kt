@@ -23,11 +23,6 @@ interface CategoryRepository : JpaRepository<Category, UUID>, CrudRepositoryPort
         )
     }
 
-    /**
-     * Read by the assembled catalog. Only root categories: a child category is
-     * reachable through its parent's products, and returning it again would
-     * duplicate the whole subtree in the response.
-     */
     @Query(
         """
         select c from Category c

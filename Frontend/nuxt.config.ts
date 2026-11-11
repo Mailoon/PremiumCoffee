@@ -50,7 +50,16 @@ export default defineNuxtConfig({
   },
 
   nitro: {
-    compressPublicAssets: true
+    compressPublicAssets: true,
+
+    // Vercel corta la funcion a los ~10s por defecto. El proxy /api/** habla con
+    // Render, y un cold start del backend supera ese limite -> 502. Con 60s hay
+    // margen para el arranque sin tocar el plan. Solo aplica al preset de Vercel.
+    vercel: {
+      functions: {
+        maxDuration: 60
+      }
+    }
   },
 
   routeRules: {
