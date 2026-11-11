@@ -1,0 +1,49 @@
+name: Keep backend awake
+
+# Render free duerme el servicio tras ~15 min sin trafico. Al despertar, la JVM
+# de Spring Boot + Flyway tarda 30-90s, mas de lo que Vercel espera, y el proxy
+# devuelve 502. Este workflow genera trafico cada 5 min para que nunca se duerma.
+#
+# Por que cada 5 min y no cada 10: los cron de GitHub Actions se retrasan a
+# menudo (5-15 min bajo carga). Con 15 min de margen hasta el sleep, un ping
+# cada 10 min puede llegar tarde y el servicio se duerme igual.
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+# Evita que dos pings se solapen si uno tarda mas de lo normal.
+concurrency:
+  group: keepalive-backend
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Despertar y comprobar el backend
+        run: |
+          # /actuator/health es el endpoint mas barato y ya lo usa el
+          # HEALTHCHECK del Dockerfile, asi que no anade superficie nueva.
+          URL="https://premiumcoffee-3k6p.onrender.com/actuator/health"
+
+          # Cualquier respuesta HTTP (200, 401, 503...) significa que la
+          # instancia esta viva y cuenta como actividad para Render. Solo el
+          # codigo 000 (sin respuesta) indica que sigue arrancando o caida.
+          for intento in 1 2 3 4; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 50 "$URL" || true)
+            echo "Intento $intento -> HTTP $code"
+
+            if [ "$code" != "000" ]; then
+              echo "Backend despierto."
+              exit 0
+            fi
+
+            # Un cold start de Spring Boot puede pasar de 60s.
+            sleep 20
+          done
+
+          echo "::error::El backend no respondio en ~4 min. Revisa Render (deploy fallido, DB caida o servicio suspendido)."
+          exit 1
