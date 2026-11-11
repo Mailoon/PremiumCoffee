@@ -155,13 +155,3 @@ export default defineNuxtConfig({
     }
   }
 })
-function defineNuxtConfig(arg0: {
-  compatibilityDate: string; devtools: { enabled: boolean }; runtimeConfig: { apiBase: any; public: { siteUrl: any } }
-  // Todo lo de app/ (pages, components, layouts...) va aqui dentro.
-  srcDir: string; app: { head: { htmlAttrs: { lang: string }; title: string; meta: ({ charset: string } | { name: string; content: string })[] } }; nitro: { compressPublicAssets: boolean }; routeRules: { '/api/**': { security: { xssValidator: boolean } }; '/api/auth/login': { security: { rateLimiter: { tokensPerInterval: number; interval: number; headers: boolean } } }; '/api/auth/register': { security: { rateLimiter: { tokensPerInterval: number; interval: number; headers: boolean } } }; '/api/auth/forgot-password': { security: { rateLimiter: { tokensPerInterval: number; interval: number; headers: boolean } } }; '/api/auth/reset-password': { security: { rateLimiter: { tokensPerInterval: number; interval: number; headers: boolean } } }; '/api/auth/**': { security: { requestSizeLimiter: { maxRequestSizeInBytes: number; maxUploadFileRequestInBytes: number } } }; '/api/media-assets/upload': { security: { requestSizeLimiter: { maxRequestSizeInBytes: number; maxUploadFileRequestInBytes: number } } } }; modules: string[]; vite: { plugins: any[] }; css: string[]; security: { nonce: boolean; sri: boolean; rateLimiter: boolean; requestSizeLimiter: boolean; corsHandler: boolean; csrf: { cookieKey: string; cookie: { path: string; httpOnly: boolean; sameSite: string; secure: boolean }; headerName: string; methodsToProtect: string[] }; headers: { contentSecurityPolicy: { 'base-uri': string[]; 'object-src': string[]; 'frame-ancestors': string[]; 'script-src-attr': string[]; 'form-action': string[]; 'script-src': string[]; 'style-src': string[]; 'img-src': string[]; 'media-src': string[]; 'font-src': string[]; 'worker-src': string[]; 'manifest-src': string[]; 'connect-src': string[]; 'upgrade-insecure-requests': boolean }; strictTransportSecurity: boolean | { maxAge: number; includeSubdomains: boolean; preload: boolean }; xFrameOptions: string; referrerPolicy: string; crossOriginResourcePolicy: string; crossOriginEmbedderPolicy: boolean; crossOriginOpenerPolicy: string } }; typescript: { nodeTsConfig: { compilerOptions: { types: string[] } }; tsConfig: { vueCompilerOptions: { plugins: never[] } } }
-}) {
-  function useRuntimeConfig() {
-  throw new Error('Function not implemented.')
-}
-}
-
